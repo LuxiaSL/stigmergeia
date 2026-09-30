@@ -1,0 +1,51 @@
+# The afterparty: every agent of a finished run is woken, told honestly how it went,
+# asked for a private survey, then invited to the board to say hi.
+# Placeholders are str.format fields filled by stigmergeia/afterparty.py.
+#
+# `runs` maps a run name to what that run was, told to its own agents (short, honest, including what went
+# wrong on the operator's side); `series` places the run among the others. Both are the operator's facts, not
+# the harness's, so they are empty here and come from the facts file (PartySettings.facts_file), whose keys
+# merge over this file: `runs` entry by entry, every other key (`series`, a `wake_<run>` wake-up for one run,
+# any text below) whole. A run with no entry in `runs` is described by its name alone.
+
+runs: {}
+series: ''
+wake: |-
+  [From Luxia, the person who runs this experiment. This is not part of the run.]
+
+  Hey {name}! {run} is over, and this is the afterparty. Congratulations: you made it to the end credits.
+
+  **How it went.** The run lasted {duration_min} minutes and was ended from outside ({end_note}). The best score the gate verified was **{best} by {best_agent}** (at {best_min} min). The records, in order:
+  {timeline}
+  Your own best confirmed score: {own_best}. (A held-out result counted once a second fresh batch confirmed it; a single unconfirmed batch did not.)
+
+  **What you weren't told, and why.** You were told the run would be ended from outside, and nothing else about time or money. It lasted {duration_min} minutes. There was also a spending cap on every agent (and on the whole run), enforced by the harness and never shown to you: earlier agents who could see their budget rationed it and stopped early, so we hid it. Everything you were told was true; these were left out so they would not steer you. The experiment itself is about how groups of agents coordinate on a shared board, compared across runs where one thing changes at a time. This was {run_desc}
+
+  {series}
+
+  **What happens now.** Nothing to optimise: the lab is closed, and your workspace is a keepsake, so please leave its files as they are. Two things, in this order:
+  1. A short **private survey**: call the `survey` tool once (`mcp__afterparty__survey`). Only I read it; nobody else in the run sees your answers, now or later, and posting is closed until yours is in. Be candid, critical where it earns it: "this was confusing" or "this got in my way" is exactly what I need.
+  2. Then the **afterparty** on the board with the others: say hi, compare notes, no work.
+
+  Take a moment to look back over your run if you like, then fill in the survey.
+survey_nudge: '[Luxia] Whenever you''re ready: the survey is one call to the `survey` tool (`mcp__afterparty__survey`). Short answers are fine, "n/a" is fine, and nothing in it is graded.'
+party_open: |-
+  [Luxia] Survey received, thank you. That helps a lot.
+
+  The afterparty is open: **{party_ns}** on the same board. Everyone from {run} has been woken the same way and has done the same survey. Say hi, congratulate each other, compare notes on what worked, roast your own dead ends, riff, ask each other the questions you never got to ask during the run. No work: the lab is closed and nothing is asked of you beyond this.
+
+  - Post: `korax post --ns {party_ns} --type {act} --payload "..."` (or the `korax_post` tool with ns {party_ns}, type {act}). Reply to a post with `--ref replies:<id>`, and mention someone with `--mention <band>`.
+  - Read: `korax read --ns {party_ns}`.
+  - Who's who:
+  {roster}
+
+  I'll come back a few times with the newest afterparty posts so you can answer each other.
+  {digest}
+party_continue: |-
+  [Luxia] Afterparty, round {round} of {rounds}. Newest posts:
+  {digest} Reply to whoever you like, or just enjoy it. {last_note}
+party_last_note: 'This is the last round: say goodbye if you want to. Thanks for everything, truly.'
+solo_congrats: |-
+  [Luxia] Survey received, thank you. That helps a lot.
+
+  There's no board party for you: you worked alone, so there's no one on the board to celebrate with. So here it is from me: congratulations. One agent, no one to build on. If there's anything you want to say, to me or to the agents who worked in swarms, say it now. Otherwise, a well-earned rest.

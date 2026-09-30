@@ -1,0 +1,36 @@
+# Ten Claude agents on the snake task, with the opening round.
+# Machine values (node host, remote dirs, cores) come from the local profile.
+# Stage a run from it:
+#   stigmergeia stage my-run configs/examples/snake-claude.yaml --board-port 7440 --panel-port 7450
+run_name: snake-claude
+task_dir: ../../tasks/snake
+n_agents: 10
+model: claude-sonnet-5-5
+effort: medium
+system_prompt: ""          # removes Claude Code's default system prompt entirely
+per_agent_budget_usd: 3    # enforced by the harness; agents are never shown it
+total_budget_usd: 30
+max_wall_hours: 1.0        # the run is ended from outside; agents are never told when
+env_file: ../../.env       # ANTHROPIC_API_KEY=... (gitignored)
+
+board:                     # stage fills in the URL and token of the run's fresh board
+  url: http://127.0.0.1:7440
+  operator_token_file: ../../boards/snake-claude/operator.token
+
+node:
+  cores_per_agent: 4       # agent i gets cores first_core + 4i ... (first_core: the profile's range start)
+  mem: 4G
+  run_timeout_s: 600
+
+gate:
+  train_episodes: 100
+  heldout_episodes: 500
+  probe_episodes: 8
+  background_after_s: 180
+
+local_cpu_quota: "100%"    # of the one local core each agent's shell is pinned to
+local_mem_max: 2G
+
+opening_round:
+  reveal_after_s: 600      # reveal whatever is sealed by then
+  answer_turn_s: 90        # answers go one agent at a time, in agent order

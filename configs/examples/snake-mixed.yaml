@@ -1,0 +1,44 @@
+# One swarm, two model families: five Claude agents and five Codex agents on
+# one board, with identical harness-hosted tools, sandbox, canon and limits.
+# Agents are numbered in group order: a00-a04 Claude, a05-a09 Codex. The
+# opening round answers in agent order, so swap the groups to swap who answers first.
+run_name: snake-mixed
+task_dir: ../../tasks/snake
+n_agents: 10
+system_prompt: ""
+agents:
+  - count: 5
+    backend: claude
+    model: claude-sonnet-5-5
+    effort: medium
+  - count: 5
+    backend: codex
+    model: gpt-6-luna
+    effort: medium
+    prices: {input: 0.10, output: 0.50, cache_read_mult: 0.1, cache_write_mult: 1.0}
+per_agent_budget_usd: 3
+total_budget_usd: 30
+max_wall_hours: 1.0
+env_file: ../../.env
+
+board:
+  url: http://127.0.0.1:7440
+  operator_token_file: ../../boards/snake-mixed/operator.token
+
+node:
+  cores_per_agent: 4
+  mem: 4G
+  run_timeout_s: 600
+
+gate:
+  train_episodes: 100
+  heldout_episodes: 500
+  probe_episodes: 8
+  background_after_s: 180
+
+local_cpu_quota: "100%"
+local_mem_max: 2G
+
+opening_round:
+  reveal_after_s: 600
+  answer_turn_s: 90

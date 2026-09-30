@@ -1,0 +1,16 @@
+# Entry points for the import-closure check (check_import_closure.py).
+#
+# One module per line: the dotted name, then `#` and the reason the module is an
+# entry point although no test imports it. A listed module seeds the traversal,
+# so the modules it imports are reached through it. A line without a reason is
+# refused; a listed name that is no module here fails the check; a listed module
+# the import graph reaches anyway is reported as redundant.
+#
+# What earns an entry is an entry point the import graph cannot see: a console
+# script, or a module run on its own with `python -m`. "Nothing imports it yet"
+# is not a reason; that module is an orphan, and the fix is a test or removal.
+#
+# An entry is a claim that its reason is true NOW.
+
+stigmergeia.analysis.codex_usage  # run as `python -m stigmergeia.analysis.codex_usage <run>...`
+stigmergeia.analysis.economics    # run as `python -m stigmergeia.analysis.economics <run>...`

@@ -1,0 +1,16 @@
+# The local profile: every value that names one operator's machines.
+# Copy to local/profile.toml (gitignored) and fill in; or point
+# STIGMERGEIA_PROFILE at a file of this shape. Run configs never carry these
+# values: they are read from here when a config asks for a node.
+
+[node]
+host = "my-compute-node"                 # an ssh host alias
+user = "me"                              # the remote account (informational; ssh config decides)
+harness_dir = "/path/on/node/harness"    # jail.py, the task files, per-run secrets
+run_root = "/path/on/node/runs"          # one directory per run is created under this
+venv = "/path/on/node/venv"              # exposed read-only inside the jail
+cores = "0-63"                           # node cores runs may pin agents to
+data_root = "/path/on/node/data"         # task data (e.g. the lmspeed corpus)
+
+[local]
+cpus = "0-7"                             # cores on this machine agents may be pinned to

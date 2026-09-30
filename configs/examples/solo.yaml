@@ -1,0 +1,29 @@
+# The one-agent control: the same task, lab, gate and hour, with no board, no
+# korax, no canon and no network. Compare a swarm's result with this one.
+run_name: solo
+task_dir: ../../tasks/snake
+n_agents: 1
+model: claude-sonnet-5-5
+effort: medium
+system_prompt: ""
+per_agent_budget_usd: 3
+total_budget_usd: 3
+max_wall_hours: 1.0
+env_file: ../../.env
+solo: true
+
+board:                     # used only to mint the agent's identity and the gate's
+  url: http://127.0.0.1:7440
+  operator_token_file: ../../boards/solo/operator.token
+
+node:
+  cores_per_agent: 4
+  mem: 4G
+  run_timeout_s: 600
+
+gate:
+  train_episodes: 100
+  heldout_episodes: 500
+
+local_cpu_quota: "100%"
+local_mem_max: 2G

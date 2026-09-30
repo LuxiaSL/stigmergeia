@@ -1,0 +1,20 @@
+#!/bin/sh
+# The agent's Claude Code CLI, in its own systemd user scope with a CPU quota.
+# Everything the agent runs locally (shell, evaluations, background jobs) is a
+# child of the CLI, so it shares this quota: one agent's heavy local work cannot
+# starve the others. Agents that share one scope throttle each other with local
+# evaluations, and then sleep for minutes at a time waiting on their own results.
+# Heavy compute belongs in the lab, on node cores reserved per agent.
+# SWARM_CPUS pins the scope to those cores, so nproc / os.cpu_count() report the
+# slice the agent really has. Without the pin, nproc reports every core of the host
+# under a fractional quota, and an agent sizes a Pool() local evaluator to that
+# count and sleeps on it. PYTHON_CPU_COUNT (3.13+) makes os.cpu_count() agree
+# with the pin; affinity alone does not.
+pin=""
+if [ -n "$SWARM_CPUS" ]; then
+    export PYTHON_CPU_COUNT="$(taskset -c "$SWARM_CPUS" nproc)"
+    pin="taskset -c $SWARM_CPUS"
+fi
+exec systemd-run --user --scope --quiet --collect \
+    -p CPUQuota="${SWARM_CPU_QUOTA:-75%}" -p MemoryMax="${SWARM_MEM_MAX:-3G}" \
+    -- $pin "$SWARM_REAL_CLI" "$@"

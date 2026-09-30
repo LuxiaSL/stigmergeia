@@ -1,0 +1,47 @@
+# The CPU language-model speedrun: train a small byte-level model in a fixed
+# 600 s CPU budget; the score is held-out bits per byte (lower is better).
+# The corpus must be on the node first: tasks/lmspeed/prepare_data.sh, under the
+# profile's data_root. One held-out evaluation is a whole training run (~12 min),
+# and a record needs a second, independent one.
+run_name: lmspeed
+task_dir: ../../tasks/lmspeed
+n_agents: 10
+model: claude-sonnet-5-5
+effort: medium
+system_prompt: ""
+per_agent_budget_usd: 3
+total_budget_usd: 30
+max_wall_hours: 2.0        # a submission takes ~12 min: an hour allows only a handful per agent
+env_file: ../../.env
+
+board:
+  url: http://127.0.0.1:7440
+  operator_token_file: ../../boards/lmspeed/operator.token
+
+node:
+  cores_per_agent: 4
+  mem: 4G
+  run_timeout_s: 1200      # a full-budget `score` (train 600 s + eval) fits in one lab call
+  # The public corpus is mounted read-only; the held-out split is not: only the
+  # unjailed gate reads it.
+  jail_template: >-
+    {python} {harness_dir}/jail.py --ws {ws} --ro {siblings} --ro {task_dir}
+    --ro {data_root}/lmspeed-data/public
+    --venv {venv} --cores {cores} --mem {mem} --tasks {tasks} --timeout {timeout} --torch-ipc copy --
+
+gate:
+  train_episodes: 256        # fixed validation windows for `score`
+  heldout_episodes: 512      # fresh held-out windows per training run
+  episode_cpu_s: null        # no per-episode budget: the gate's own training budget rules
+  higher_is_better: false    # bits per byte
+  heldout_timeout_s: 1200
+  run_sd: 0.04               # between-run sd floor for the pooled interval
+  digest: dir                # train.py + model.py (+ helpers) identify a submission together
+  probe_episodes: 0
+  estimate_s: 700            # every submission runs in the background
+
+local_cpu_quota: "100%"
+local_mem_max: 2G
+
+opening_round:
+  reveal_after_s: 600

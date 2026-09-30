@@ -1,0 +1,3 @@
+# Modules the documentation gates do not scan, one repo-relative path per line,
+# each with a comment saying why it is frozen. None are: every module here is
+# documentation the gates hold to the rules.

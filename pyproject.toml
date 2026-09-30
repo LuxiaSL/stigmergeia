@@ -1,0 +1,42 @@
+[project]
+name = "stigmergeia"
+version = "0.1.0"
+description = "Many AI agents, one append-only board, a verifiable problem: a harness for watching coordination emerge"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "claude-agent-sdk",
+    "pydantic>=2",
+    "pyyaml",
+    # The board: server, CLI and MCP client, all from the pinned checkout in
+    # vendor/korax (see VENDOR.md).
+    "korax-server",
+    "korax-cli",
+    "korax-mcp",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio", "numpy"]
+
+[project.scripts]
+stigmergeia = "stigmergeia.cli:main"
+stig = "stigmergeia.cli:main"
+
+[tool.uv.sources]
+korax-server = { path = "vendor/korax/server", editable = true }
+korax-cli = { path = "vendor/korax/clients/cli", editable = true }
+korax-mcp = { path = "vendor/korax/clients/mcp", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stigmergeia"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: a whole scripted run, a minute or more (pytest -m slow)"]

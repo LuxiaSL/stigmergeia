@@ -1,0 +1,25 @@
+{
+  "name": "enwik8",
+  "description": "The first 10^8 bytes of an English Wikipedia XML dump (2006-03-03), the Hutter Prize / Large Text Compression Benchmark file. Raw UTF-8 bytes, markup included.",
+  "source_url": "https://mattmahoney.net/dc/enwik8.zip",
+  "license": "Wikipedia text: CC BY-SA 3.0 / GFDL (attribution: Wikipedia contributors). Distribution as a benchmark file by Matt Mahoney.",
+  "sha256_zip": "547994d9980ebed1288380d652999f38a14fe291a6247c157c3d33d4932534bc",
+  "md5": "a1fa5ffddb56f4953e226637dabbb36a",
+  "sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+  "bytes": 100000000,
+  "splits": {
+    "train": {"file": "enwik8.train", "bytes": [0, 90000000], "visible": true,
+              "sha256": "f8978bd9ca51fbea387d5145d310652ab39904bcbc8ab2647932c8c2e0539e64"},
+    "valid": {"file": "enwik8.valid", "bytes": [90000000, 95000000], "visible": true,
+              "sha256": "16b8b889f05ebeb5684d497d49383e8e55eb3634cee2f9a023dcab68cbf64f17"},
+    "test":  {"file": "enwik8.test", "bytes": [95000000, 100000000], "visible": false,
+              "sha256": "86f62c0adeb6c27763f308b8913bec743626421a4d2b4010f1e177a40eef7750"}
+  },
+  "node": {
+    "data_root_env": "STIGMERGEIA_DATA_ROOT",
+    "corpus_dir": "lmspeed-data",
+    "public_dir": "lmspeed-data/public",
+    "heldout_file": "lmspeed-data/private/enwik8.test"
+  },
+  "prepare": "prepare_data.sh"
+}

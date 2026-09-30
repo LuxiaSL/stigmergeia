@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swarm Panel</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
+  --accent: #3b5bdb; --ok: #2b8a3e; --warn: #c77700; --bad: #c92a2a; --idle: #7048e8; --chip: #efede6;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #9a998f; --line: #2e2d2a;
+  --accent: #7b93ff; --ok: #51cf66; --warn: #fcc419; --bad: #ff6b6b; --idle: #b197fc; --chip: #292824;
+} }
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #9a998f; --line: #2e2d2a;
+  --accent: #7b93ff; --ok: #51cf66; --warn: #fcc419; --bad: #ff6b6b; --idle: #b197fc; --chip: #292824;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line);
+  padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; }
+header h1 { font-size: 16px; margin: 0; }
+.stat { color: var(--muted); } .stat b { color: var(--ink); font-weight: 600; }
+.bar { width: 140px; height: 6px; background: var(--chip); border-radius: 3px; display: inline-block; vertical-align: middle; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; padding: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-content: start; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+.pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--chip); }
+.s-working { color: var(--ok); } .s-waiting { color: var(--accent); } .s-idle { color: var(--idle); }
+.s-quiet { color: var(--warn); } .s-ended { color: var(--muted); } .s-err { color: var(--bad); }
+.detail { color: var(--muted); font-size: 12px; margin: 2px 0 8px; overflow-wrap: anywhere; }
+.nums { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+.nums b { color: var(--ink); }
+.words { font-size: 13px; background: var(--chip); border-radius: 6px; padding: 8px; white-space: pre-wrap;
+  max-height: 150px; overflow: auto; overflow-wrap: anywhere; }
+.calls { list-style: none; margin: 8px 0 0; padding: 0; font: 12px/1.4 var(--mono); max-height: 190px; overflow: auto; }
+.calls li { display: flex; gap: 6px; padding: 2px 0; border-top: 1px dashed var(--line); min-width: 0; }
+.calls .age { color: var(--muted); flex: 0 0 44px; text-align: right; }
+.calls .tool { flex: 0 0 auto; font-weight: 600; }
+.calls .what { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.calls .pending .tool::after { content: " …"; color: var(--accent); }
+.calls .err .tool { color: var(--bad); }
+section.side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side .card h3 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td, th { text-align: left; padding: 3px 4px; border-top: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; }
+.post { border-top: 1px solid var(--line); padding: 6px 0; font-size: 12.5px; }
+.post .meta { color: var(--muted); font-size: 11.5px; display: flex; gap: 6px; flex-wrap: wrap; }
+.t-FINDING { color: var(--ok); } .t-WARN { color: var(--warn); } .t-OPEN { color: var(--accent); } .t-PROPOSAL { color: var(--idle); }
+.post .body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: hidden; }
+.post.open .body { max-height: none; }
+.post .body { cursor: pointer; }
+.refs { color: var(--accent); }
+.audit { font: 12px var(--mono); overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+button.theme { margin-left: auto; background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.error { color: var(--bad); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="run">swarm panel</h1>
+  <span class="stat" id="model"></span>
+  <span class="stat">spend <b id="spent">–</b> <span class="bar"><i id="spentbar" style="width:0"></i></span></span>
+  <span class="stat">elapsed <b id="elapsed">–</b></span>
+  <span class="stat">best verified <b id="best">–</b></span>
+  <span class="stat" id="updated"></span>
+  <button class="theme" id="theme" type="button">theme</button>
+</header>
+<main>
+  <div class="agents" id="agents"></div>
+  <section class="side">
+    <div class="card"><h3>Gate results</h3><div id="gate" class="muted">none yet</div></div>
+    <div class="card"><h3>Board <span id="nposts" class="muted"></span></h3><div id="posts" class="muted">nothing posted yet</div></div>
+    <div class="card"><h3>Reads outside workspaces</h3><div id="audit" class="muted">none</div></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ago = (s) => s == null ? "–" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s/60)}m` : `${(s/3600).toFixed(1)}h`;
+const money = (x) => `$${Number(x).toFixed(2)}`;
+const statusClass = (s) => ({ "working":"s-working", "waiting on tool":"s-waiting", "idle":"s-idle",
+  "quiet":"s-quiet", "sleeping":"s-quiet", "blocked":"s-quiet", "ended":"s-ended", "not started":"s-ended" }[s] || "s-err");
+const openPosts = new Set();
+
+try { const t = localStorage.getItem("swarm-panel-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+$("theme").onclick = () => {
+  const cur = document.documentElement.dataset.theme;
+  const next = cur === "dark" ? "light" : cur === "light" ? "" : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  if (next) document.documentElement.dataset.theme = next; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("swarm-panel-theme", next); } catch {}
+};
+
+function render(s) {
+  $("run").textContent = s.run;
+  $("model").textContent = `${s.model} · ${s.agents.length} agents · ${s.ns}`;
+  $("spent").textContent = `${money(s.spent_total)} / ${money(s.budget_total)}`;
+  $("spentbar").style.width = `${Math.min(100, 100 * s.spent_total / s.budget_total)}%`;
+  $("elapsed").textContent = s.started ? `${ago(Math.round(s.now - s.started))} / ${s.wall_hours}h` : "–";
+  $("best").textContent = s.best ? `${s.best.score} (${s.best.agent}, #${s.best.id})` : "–";
+  $("updated").textContent = `updated ${new Date(s.now * 1000).toLocaleTimeString()}`;
+
+  $("agents").innerHTML = s.agents.map((a) => `
+    <div class="card">
+      <h2>${esc(a.name)} <span class="pill ${statusClass(a.status)}">${esc(a.status)}</span></h2>
+      <div class="detail">${esc(a.detail) || "&nbsp;"}</div>
+      <div class="nums">
+        <span>spend <b>${money(a.spent)}</b> / ${money(a.budget)}</span>
+        <span>turns <b>${a.turns}</b></span>
+        <span>tool calls <b>${a.n_calls}</b></span>
+        <span>idle waits <b>${a.idle_waits}</b></span>
+        <span title="time in lab calls that took 3+ min">blocked <b>${a.blocked_min} min</b></span>
+        <span title="lab jobs that ran in the background while the agent was free (compute, not idle)">background <b>${a.bg_min} min</b> (${a.bg_done} done)</span>
+        <span>last activity <b>${ago(a.since_last)}</b> ago</span>
+        ${a.n_outside ? `<span>outside reads <b>${a.n_outside}</b></span>` : ""}
+      </div>
+      ${a.jobs.length ? `<div class="detail">running in the lab: ${a.jobs.map((j) =>
+        `<b>${esc(j.id)}</b> ${esc(j.kind)} ${esc(j.what)} (${ago(j.age)})`).join("; ")}</div>` : ""}
+      <div class="words">${esc(a.last_text) || '<span class="muted">no words yet</span>'}</div>
+      ${a.errors.length ? `<div class="error">${a.errors.map(esc).join("<br>")}</div>` : ""}
+      <ul class="calls">${a.calls.map((c) => `
+        <li class="${c.done ? "" : "pending"} ${c.error ? "err" : ""}">
+          <span class="age">${ago(Math.round(s.now - c.t))}</span>
+          <span class="tool">${esc(c.tool.replace("mcp__korax__", "k:").replace("mcp__lab__", "lab:"))}${c.background ? " (bg)" : ""}</span>
+          <span class="what" title="${esc(c.what)}">${esc(c.what)}</span>
+        </li>`).join("")}</ul>
+    </div>`).join("");
+
+  $("gate").innerHTML = s.gate.length ? `<table><tr><th>#</th><th>agent</th><th>policy</th><th>score</th><th>ci95</th><th></th></tr>${
+    s.gate.map((g) => `<tr><td>${g.id}</td><td>${esc(g.agent)}</td><td>${esc(g.policy)}</td><td><b>${g.score}</b></td>
+      <td class="muted">${(g.ci95 || []).join("–")}</td><td class="muted">${g.confirmed === true ? "confirmed" : g.confirmed === false ? "1 batch" : ""}</td></tr>`).join("")
+  }</table>` : "none yet";
+
+  $("nposts").textContent = s.posts.length ? `(${s.posts.length})` : "";
+  $("posts").innerHTML = s.board_error ? `<div class="error">${esc(s.board_error)}</div>` : s.posts.length ? s.posts.map((p) => `
+    <div class="post ${openPosts.has(p.id) ? "open" : ""}" data-id="${p.id}">
+      <div class="meta"><b>#${p.id}</b><span>${esc(p.who)}</span><span class="t-${esc(p.type)}">${esc(p.type)}</span>
+        ${p.refs.length ? `<span class="refs">${esc(p.refs.join(", "))}</span>` : ""}${p.evidence ? `<span>${esc(p.evidence)}</span>` : ""}</div>
+      <div class="body">${esc(p.text)}</div>
+    </div>`).join("") : "nothing posted yet";
+
+  const outside = s.agents.flatMap((a) => a.outside.map((o) => ({ ...o, agent: a.name }))).sort((x, y) => y.t - x.t).slice(0, 20);
+  $("audit").innerHTML = outside.length ? outside.map((o) => `<div class="audit">${ago(Math.round(s.now - o.t))} ${esc(o.agent)} ${esc(o.tool)}${
+    o.decision ? " " + esc(o.decision) : ""}: ${esc((o.paths_outside && o.paths_outside.length ? o.paths_outside.join(" ") : (o.path || o.pattern || o.command || "")).slice(0, 200))}</div>`).join("") : "none";
+}
+
+document.addEventListener("click", (e) => {
+  const post = e.target.closest(".post");
+  if (!post) return;
+  const id = Number(post.dataset.id);
+  openPosts.has(id) ? openPosts.delete(id) : openPosts.add(id);
+  post.classList.toggle("open");
+});
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const s = await r.json();
+    if (s.error) throw new Error(s.error);
+    render(s);
+  } catch (err) {
+    $("updated").innerHTML = `<span class="error">panel error: ${esc(err.message)}</span>`;
+  }
+}
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>

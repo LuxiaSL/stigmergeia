@@ -1,0 +1,74 @@
+name: gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      # The pinned Korax is a submodule; the pin test compares its gitlink with the constant.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          sudo apt-get install -y rsync
+          uv sync --extra dev
+
+      - name: Tests
+        run: uv run pytest tests/
+
+      # Each task is self-contained (its gate is a top-level `gate` module), so each suite
+      # runs in its own process.
+      - name: Task tests
+        run: |
+          uv run pytest tasks/snake/tests
+          uv run pytest tasks/lmspeed/tests
+
+      - name: State what is true now
+        run: |
+          mkdir -p receipts
+          uv run python -m tools.check_timelessness --root stigmergeia bootstrap node tasks tools tests \
+            --json receipts/timelessness.json
+
+      - name: Reachable referents
+        run: |
+          mkdir -p receipts
+          uv run python -m tools.check_referents --root stigmergeia bootstrap node tasks tools tests \
+            --json receipts/referents.json
+
+      # Without a local profile (none on a runner) this checks shapes only; an operator's
+      # own run of it also checks every value their profile names.
+      - name: Private references
+        run: |
+          mkdir -p receipts
+          uv run python -m tools.check_private_refs --json receipts/private-refs.json
+
+      - name: Import closure
+        run: |
+          mkdir -p receipts
+          uv run python -m tools.check_import_closure --package stigmergeia --roots tests \
+            --allowlist tools/closure_allowlist.txt --json receipts/closure.json
+
+      # A whole scripted swarm: a real board, the opening round, the lab, the gate.
+      - name: End to end (scripted agents)
+        run: uv run pytest -m slow tests/test_demo_e2e.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-receipts-py${{ matrix.python-version }}
+          path: receipts/
+          if-no-files-found: warn

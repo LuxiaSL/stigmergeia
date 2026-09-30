@@ -1,0 +1,232 @@
+# Pattern data for the referent rule (check_referents.py).
+#
+# Four sections, each one regex per line, `#` comments, blank lines ignored.
+# Lines before the first section header belong to [allow].
+#
+#   [allow]  Text that is a legitimate identifier rather than a pointer into
+#            this tree. Each pattern is BLANKED OUT of the line before referents
+#            are looked for, so a pattern wider than its reason hides real
+#            violations — keep each one anchored to the idiom it names.
+#
+#   [defer]  Prose that defers meaning to something a reader cannot open. These
+#            are matched, not masked: a hit is a violation.
+#
+#   [cite]   Provenance idioms: a citation of a document, a process role, a
+#            phase or item code, a pre-registration, a commit. Matched, not
+#            masked — a hit is a violation. Outside the tree that held those
+#            documents the citation resolves nowhere, and the code is the receipt
+#            for what the code does. Git keeps the history of how it got here.
+#
+#   [infra]  The SHAPE of prose that presupposes one operator's machines or job
+#            scheduler. Matched, not masked — a hit is a violation. No entry here
+#            names a host, an account or a scheduler: a published list of names
+#            defeats keeping the names out, so a bare name is a reviewer's catch
+#            and this section holds only the shapes such prose takes.
+#
+# All four sets are maintained, not closed. A new identifier idiom earns an
+# [allow] line with the reason above it; a new way of burying meaning earns a
+# [defer] line; a new citation idiom earns a [cite] line; a new infrastructure
+# shape earns an [infra] line.
+#
+# [allow], [cite] and [infra] patterns are matched case-sensitively, because the
+# capitalisation is usually what distinguishes an identifier or a code from the
+# prose around it; a pattern that wants both spellings says so with an inline
+# `(?i:...)`. [defer] patterns are matched case-insensitively, because a phrase is
+# a phrase whether or not it begins a sentence.
+
+[allow]
+
+# Public URLs are reachable by definition: the rule asks for a reader who can
+# follow the name, and a link is the one pointer that always works.
+https?://[^\s`'"<>)\]]+
+
+# A shebang is a kernel instruction, not prose, and the interpreter it names is
+# on the machine rather than in the repository. The tokenizer reports it as a
+# comment because that is what it lexically is.
+^#!\S+
+
+# The value after a flag in a usage example is an argument the operator supplies:
+# a directory on their machine, or a file the command is about to write. One value
+# per flag is masked, deliberately — masking a second would let a flag hide the
+# referent in the rest of the sentence.
+--[a-z0-9-][a-z0-9-]*[= ]\S+
+
+# An environment assignment in a usage example, same reason: the value is the
+# operator's, and the variable is what the reader needs.
+\b[A-Z][A-Z0-9_]*=\S+
+
+# Kernel interfaces every Linux machine carries: `/proc/self/maps`, `/dev/shm`. They
+# are absolute paths that resolve on the reader's own machine, not on the
+# author's, which is the opposite of what the absolute-path rule exists to catch.
+(?<![\w.])/(?:proc|dev|sys|run)/[A-Za-z0-9_./-]+
+
+# System paths every Linux machine carries, which the jail and the sandbox mount
+# or mask by name: they resolve on the reader's own machine.
+(?<![\w.])/(?:tmp|usr|bin|lib|lib64|etc|opt)(?:/[A-Za-z0-9_.*{}<>-]+)*/?
+
+# A run's directory layout: what provisioning creates and every tool reads. These
+# name the SHAPE of a run tree (`<run>/private/<agent>/transcript.jsonl`), created
+# at run time outside git, not a directory of this repository.
+\b(?:runs|boards|private|ws|agents|submissions|afterparty)/[A-Za-z0-9_.<>/*{}=-]*
+<[a-z_]+>/[A-Za-z0-9_.<>/*{}=-]*
+\{[a-z_]+\}/[A-Za-z0-9_.<>/*{}=-]*
+
+# An agent's view of its own workspace and its peers': `task/gate.py`,
+# `../<name>/`, `.tmp/`, `results.tsv`. These are paths inside the sandbox the
+# agent runs in, which provisioning builds; the task itself is under tasks/ here.
+\.\./[A-Za-z0-9_.<>/*{}-]*
+\btask/[A-Za-z0-9_./-]*
+\.(?:tmp|runs|codex)/[A-Za-z0-9_./-]*
+\bresults\.tsv\b
+
+# The local profile's own filename. It is gitignored by design (it holds one
+# operator's hosts and paths); the tracked local/profile.example.toml is its shape.
+\bprofile\.toml\b
+
+# Files in the operator's home or a tool's own state, named because the harness
+# masks them from agents: `~/.codex/auth.json`, `~/.ssh`. They are on the reader's
+# machine, and hiding them is what the code does.
+~/\.[A-Za-z0-9_./*-]+
+\bauth\.json\b
+
+# Source files of an installed third-party package, written with the package's own
+# directory first. They resolve in the public release the module names.
+\b(?:torch|claude_agent_sdk|korax|korax_cli|korax_mcp)/[A-Za-z0-9_./-]+\.py\b
+
+# A multiplier or a count in thousands written with its unit (`~40x`, `30k`): a
+# quantity, which shares the shape of a two-digit item code and is not one.
+(?<![\w.:-])~?[0-9]+(?:\.[0-9]+)?[xk](?![\w-])
+
+# Metasyntactic package names in the import-semantics illustration of the
+# closure checker: `a.b.c`, `mod.py` and their file forms stand for any module,
+# the way `foo` does.
+\b[a-z]/(?:[a-z]/)*__init__\.py
+\bmod\.py
+
+[defer]
+# Meaning that lives in a conversation. Each of these leaves a reader holding
+# this repository with nothing to open.
+\bsee the (?:earlier|previous|prior|above)\b
+\bas discussed\b
+\bas decided elsewhere\b
+\bas (?:noted|described|agreed|ruled) elsewhere\b
+\bper the (?:earlier|previous|prior)\b
+\bthe previous discussion\b
+\bsee above in\b
+\bas (?:we )?(?:agreed|ruled) (?:earlier|above)\b
+\bfor the reasons? (?:discussed|given) (?:earlier|above|when)\b
+
+# A working session as the place something happens: "next session", "this
+# session". The session is a stretch of somebody's calendar, not a thing a reader
+# can open, and what it was going to settle belongs in an issue.
+\b(?:next|this|last|previous|prior) session\b
+
+[cite]
+# A section mark cites a numbered part of a document that is not in this tree.
+# The two frozen pre-registrations under docs/planning/ are in the tree and are
+# linked by path; a bare mark says nothing about which document it means.
+§
+
+# A pre-registration, a ruling, an addendum, a codicil, a journal entry: document
+# kinds whose whole purpose is to sit outside the code and be cited. What the code
+# depends on is the standing fact, stated here, not the citation.
+(?i:prereg)
+(?i:\baddendu[m]\b)
+(?i:\bcodici[l]\b)
+(?i:\brulin[g]\b)
+(?i:\bjourna[l]\b)
+
+# A decision credited to whoever made it rather than stated as the constraint:
+# "ruled by", "ratified by", "ratification". A named person or role as the
+# authority is provenance; the reader needs what was decided and why it holds.
+(?i:\brule[d] by\b)
+(?i:\bratifi(?:ed|cation)\b)
+
+# The roles and records of a private working process — the desk that rules, the
+# enactor that runs, the baton handed between sessions, the ledger and the brief
+# work is recorded in. None of them is in this tree, and a comment that defers to
+# one ("the desk decides", "per the brief") hands the reader nothing to open.
+(?i:\bdes[k]\b)
+(?i:\benactor)
+(?i:\bbato[n]\b)
+(?i:\bledger(?:ed)?\b)
+\bBRIE[F]\b
+(?i:\bthe brie[f]\b)
+(?i:\bbrie[f] requirement)
+
+# A numbered working session, and a numbered re-freeze of a pre-registration:
+# indexes into somebody's calendar and somebody's record, not names this
+# repository defines.
+(?i:\bsessio[n][- ][0-9]+\b)
+(?i:\bre-freez[e]\s*#\s*[0-9]+)
+
+# A named arm or milestone of the research programme. The letter-and-digit code is
+# an index into a plan, not a name this repository defines. `arm A5` and a bare
+# `A5` are the same citation.
+\b[Aa]rms?\s+[A-Z][0-9]\b
+\bA[1-9][0-9]?\b
+
+# A rake: a numbered lesson in a list kept outside this tree, cited as `rake M29`
+# or as the bare code. The lesson the code depends on is the thing to state.
+(?i:\brakes?\s+[A-Z]?[0-9]+)
+\bM[1-9][0-9]?\b
+
+# Phase, vector and leg codes of the research plan: `P8-2`, `V7`, `Leg-3`. The
+# left guard keeps a model name (`DeepSeek-V3`, `FP8`) out, the negative lookahead
+# keeps a percentile (`P95`) and a zero-padded row id (`P000`) out, and a path
+# segment (`leg2_diagnostics`) stays out because the code must stand as a word.
+(?<![\w-])P(?!(?:50|90|95|99)\b|0)[0-9]+(?:-[0-9A-Z]+[a-z]?)*\b
+(?<![\w-])V[0-9]+\b
+(?<![\w/-])[Ll]eg-?[0-9]+\b
+
+# A specification clause cited by code rather than by name: `spec P-B`. Plain
+# `spec` is ordinary vocabulary here — a job spec, a steering spec — so the code
+# is what makes this a citation.
+\b[Ss]pe[c]\s+[A-Z](?:-[A-Z0-9]+)+\b
+
+# A bare item code from a rake list or a work plan: `12d`, `14e`. Two digits and
+# one letter, standing alone — a preset key (`3b`, `8b`) is one digit and a
+# hyphenated model name (`gemma3-27b`) is excluded by the left guard, and so is a
+# format spec (`{index:02d}`), whose colon the guard also refuses. A two-digit
+# quantity with a one-letter unit would share the shape: `30x`, `16k`. Those earn an
+# [allow] line for the unit (the multiplier line above), rather than a wider guard
+# here, which would also excuse a real code.
+(?<![\w.:-])[0-9]{2}[a-z](?![\w-])
+
+# A commit hash. Git is the receipt for what changed; a hash quoted in prose asks
+# a reader to go somewhere else to find out what the code in front of them does.
+# At least one digit and one letter, so an English word spelled in hex is not one.
+(?<![\w.-])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}(?![\w.-])
+
+# A run of the author's own experiments, cited by its code: `canon-8`, `solo-1`,
+# `codex-t3`. Run codes are records of experiments kept outside this tree; what a
+# line of code depends on is the standing fact the run established, stated here.
+(?i:\b(?:canon|solo|smoke|pilot|codex|waitsmoke|axsmoke|c[0-9]smoke|gate-test)-(?:t|c)?[0-9]+\b)
+(?i:\bcanon[0-9]+(?:-base)?\b)
+
+# An envelope on one of the author's boards, cited by id: `#553`. A board a reader
+# cannot open is not a referent; the fact the post recorded is.
+(?<![\w&/])#[0-9]{3,}\b
+
+[infra]
+# "The node" alone is this harness's own vocabulary: the machine a run's config
+# names for jailed compute (config.NodeConfig), so "on the node" is not a shape
+# listed here; the shapes below still are.
+
+# A scheduler's submit command written as a command, in backticks or quotes: the
+# reader has no account on the scheduler it names. What the code needs said is
+# the resource it asks for — cards, memory, wall time — which holds on any
+# scheduler.
+(?:[`"]|(?<!\w)')[a-z][a-z0-9_-]*\s+submi[t]\b
+
+# A job coordinator's HTTP API: a service on one operator's cluster.
+(?i:\bcoordinator\s+(?:HTTP\s+)?AP[I]\b)
+
+# Work described by the machine it runs on rather than by what it needs: "a
+# node-side run", "a cross-node probe", "the collection node", "on both nodes".
+# The constraint worth a comment — the memory ceiling, the thread budget — holds
+# wherever the code runs, and is what to write instead.
+(?i:\bnode-sid[e]\b)
+(?i:\bcross-nod[e]\b)
+(?i:\bcollection nod[e]\b)
+(?i:\bour (?:cluster|box|boxes|machines?|nodes?)\b)

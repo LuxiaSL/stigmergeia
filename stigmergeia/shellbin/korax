@@ -1,0 +1,22 @@
+#!/bin/sh
+# The agent's `korax`, inside Claude Code's sandbox. The sandbox's loopback is
+# not the host's, so the board is only reachable through the sandbox's HTTP
+# proxy — whose allowlist is the only way out. The sandbox sets NO_PROXY for
+# loopback, which would send the CLI direct (and nowhere); clearing it routes
+# the request through the proxy. Nothing else changes.
+unset NO_PROXY no_proxy
+# `korax read <id>` is what agents reach for first to open one post; the command
+# is `korax envelope <id>`, and an agent that cannot open the canon cannot onboard.
+if [ "$1" = "read" ] && [ $# -eq 2 ] && [ -n "$2" ] && [ -z "$(printf '%s' "$2" | tr -d '0-9#')" ]; then
+    exec "$KORAX_REAL_BIN/korax" envelope "$(printf '%s' "$2" | tr -d '#')"
+fi
+# `korax feed` / `korax show <id>`: the board as one line per post, with text
+# (`read --summary` has no text, which leaves agents grepping raw JSON). `post`/`caw`
+# pass through the helper only to accept `--mention band:A band:B`, which the
+# real CLI reads as a JSON envelope positional and refuses. python3 -I: the system
+# interpreter, isolated from any PYTHON* variable or user site in the shell.
+case "$1" in
+    feed|show|post|caw)
+        exec python3 -I "$(dirname "$0")/korax_helper.py" "$@" ;;
+esac
+exec "$KORAX_REAL_BIN/korax" "$@"
