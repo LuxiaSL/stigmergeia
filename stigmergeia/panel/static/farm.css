@@ -9,7 +9,10 @@
   --trail:#e3a64a; --record:#f2d27a; --dead:#c4574d;
   --claude:#e27d5f; --codex:#4fb3c9; --fake:#b8a3e0;
   --paper:#ebe2cf; --paper-ink:#2b241d; --stamp:#b3261e; --edge-ink:#8a5a14; --warn-ink:#8e2a20;
-  --fresh-ok:var(--ink); --fresh-stale:#e3a64a; --fresh-dead:#c4574d;
+  /* categories in the instruments only: muted sand-derived tones that never collide with a meaning above */
+  --cat-1:#d9cbb5; --cat-2:#8a7a6a; --cat-3:#b59a7a; --cat-4:#6f8a88; --cat-5:#4a403a; --cat-6:#a3906f; --cat-7:#7d6f8f;
+  --measure:#c9bba6;  /* a measured line in an instrument (herding) */
+  --fresh-ok:var(--ink); --fresh-stale:var(--ink-dim); --fresh-dead:#c4574d;
   --num:"Noto Serif Display", Georgia, serif;
   --cap:"Barlow Condensed", "Arial Narrow", sans-serif;
   --words:"Newsreader", Georgia, serif;
@@ -34,7 +37,7 @@ a{color:var(--ink-dim)}
 .read.fresh.dead b{color:var(--fresh-dead)}
 .links{margin-left:auto;display:flex;gap:14px;align-items:center}
 .links a,.links button{font:600 11px var(--cap);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);background:none;border:1px solid var(--hair);padding:5px 10px;cursor:pointer;text-decoration:none;border-radius:0}
-.links a:hover,.links button:hover{border-color:var(--trail);color:var(--ink)}
+.links a:hover,.links button:hover{border-color:var(--ink-dim);color:var(--ink)}
 .stage{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;margin-top:12px}
 @media (max-width:1000px){.stage{grid-template-columns:1fr}}
 .pane{position:relative;min-width:0}
@@ -57,7 +60,7 @@ a{color:var(--ink-dim)}
   background-size:100% 24px,100% 24px,100% 48px;background-attachment:local}
 @media (max-width:1000px){.tty{height:60vh}}
 .tty .line{padding:3px 0;border-bottom:1px dotted rgba(43,36,29,.18);overflow-wrap:anywhere}
-.tty .line.hl{background:rgba(227,166,74,.25)}
+.tty .line.hl{background:rgba(43,36,29,.14);outline:1px solid rgba(43,36,29,.4)}
 .tty .hd{font-weight:700}
 .tty .edge{color:var(--edge-ink)}
 .tty .warn{color:var(--warn-ink)}
@@ -69,12 +72,12 @@ a{color:var(--ink-dim)}
 @keyframes print{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 .scrub{display:flex;align-items:center;gap:10px;margin-top:10px}
 .scrub button{font:600 12px var(--cap);letter-spacing:.18em;text-transform:uppercase;background:transparent;color:var(--ink);border:1px solid var(--hair);padding:7px 12px;cursor:pointer;border-radius:0}
-.scrub button:hover,.scrub button:focus-visible{border-color:var(--trail);outline:none}
+.scrub button:hover,.scrub button:focus-visible{border-color:var(--ink-dim);outline:none}
 .scrub .livebtn.on{border-color:var(--dead);color:var(--dead)}
 .scrub .livebtn.on::before{content:"● "}
 .scrub .livebtn[disabled]{opacity:.35;cursor:default}
 .track{position:relative;flex:1;min-width:0}
-.track input{width:100%;accent-color:var(--trail)}
+.track input{width:100%;accent-color:var(--ink-dim)}
 .ticks{position:absolute;inset:0 7px;pointer-events:none}
 .ticks i{position:absolute;top:-6px;width:2px;height:8px;background:var(--record)}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px}

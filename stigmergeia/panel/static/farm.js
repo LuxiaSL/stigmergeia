@@ -18,7 +18,7 @@ const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const C = {};
 for (const k of ['void', 'glass', 'hair', 'ink', 'ink-dim', 'ink-ghost', 'sand-1', 'sand-2', 'sand-3', 'trail', 'record',
-  'dead', 'claude', 'codex', 'fake']) C[k] = css('--' + k);
+  'dead', 'claude', 'codex', 'fake', 'cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5', 'cat-6', 'cat-7', 'measure']) C[k] = css('--' + k);
 const rgb = h => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const rgba = (h, a) => { const [r, g, b] = rgb(h); return `rgba(${r},${g},${b},${a})`; };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -46,6 +46,7 @@ function fold(ev) {
       if (S.byId.has(ev.id)) return;
       S.posts.push(ev); S.byId.set(ev.id, ev); S.board.push(ev);
       if (ev.type === 'WARN') S.captions.push({ t: ev.t, who: ev.who, what: 'dead end', text: warnLine(ev.text), col: C.dead });
+      else S.captions.push({ t: ev.t, who: ev.who, what: 'on the board · ' + ev.type.toLowerCase(), text: postLine(ev.text), col: null });
       break;
     case 'gate':
       if (S.byId.has(ev.id)) return;
@@ -66,6 +67,9 @@ function fold(ev) {
       break;
   }
 }
+// the line of a post worth reading aloud: skip the "a00: answer to the opening round" header
+const postLine = t => { const ls = (t || '').split('\n').map(l => l.trim()).filter(Boolean);
+  return ((ls.length > 1 && /^a\d+:/.test(ls[0]) ? ls[1] : ls[0]) || '').slice(0, 260); };
 const num = x => (x == null ? '—' : (+x).toFixed(2));
 const warnLine = t => { const m = /Result:\s*(.*)/.exec(t || ''); return (m ? m[1] : (t || '').split('\n')[0]).slice(0, 220); };
 
@@ -385,6 +389,39 @@ function drawSand(best, now) {
   c.globalCompositeOperation = 'lighter'; c.drawImage(light, 0, 0, W, H); c.globalCompositeOperation = 'source-over';
 }
 
+// ------------------------------------------------------------------ spoil: grains kicked up as work lands
+// When time moves forward across a post, the ant that wrote it throws up a little sand; a record throws
+// gold. Only forward motion through an event spawns grains, so a seek or a scrub never sprays.
+let grains = [], spoilT = null;
+function spoil(vis, now) {
+  if (reduced) return;
+  if (spoilT != null && T > spoilT && T - spoilT < 30) {
+    for (const p of vis) if (p.t > spoilT && p.t <= T) {
+      const [x, y] = ptOf(p);
+      for (let i = 0; i < 16; i++) grains.push({ x, y, vx: (Math.random() - 0.5) * 70, vy: -30 - Math.random() * 70, born: now, life: 900 + Math.random() * 700,
+        col: p.type === 'WARN' ? C.dead : Math.random() < 0.3 ? colorOf(p.who) : C.ink, r: 0.8 + Math.random() * 1.1 });
+    }
+    for (const g of S.gates) if (g.record && g.t > spoilT && g.t <= T) {
+      const [x, y] = chamberAt(g, vis);
+      for (let i = 0; i < 40; i++) { const a = Math.random() * 7, v = 20 + Math.random() * 90;
+        grains.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, born: now, life: 1400 + Math.random() * 1200, col: C.record, r: 0.8 + Math.random() * 1.4, spark: true }); }
+    }
+  }
+  spoilT = T;
+}
+function drawGrains(now, dt) {
+  if (!grains.length) return;
+  const c = fctx;
+  grains = grains.filter(g => now - g.born < g.life);
+  for (const g of grains) {
+    g.vy += (g.spark ? 40 : 260) * dt; g.vx *= 1 - 1.5 * dt; g.x += g.vx * dt; g.y += g.vy * dt;
+    const k = 1 - (now - g.born) / g.life;
+    c.globalAlpha = Math.max(0, k) * (g.spark ? 1 : 0.8); c.fillStyle = g.col;
+    c.beginPath(); c.arc(g.x, g.y, g.r, 0, 7); c.fill();
+  }
+  c.globalAlpha = 1;
+}
+
 // ------------------------------------------------------------------ the marks (2D overlay)
 let hits = [];
 function drawAnt(x, y, ang, col, moving, now, carry) {
@@ -509,8 +546,8 @@ function drawMarks(vis, trails, now) {
     if (p && p.t <= T) { const [x, y] = p.gate ? chamberAt(p, vis) : ptOf(p);
       c.strokeStyle = C.ink; c.lineWidth = 1; c.beginPath(); c.arc(x, y, 14 + 2 * Math.sin(now / 200), 0, 7); c.stroke(); }
   }
-  // the ants: where each agent is now
-  const showLabels = colW() >= 40;
+  // the ants: where each agent is now; labels laid out after, so two ants in one lineage never overprint
+  const showLabels = colW() >= 40, labels = [];
   for (const [a, pts] of trails) {
     const [st, why] = statusAt(a); if (st === 'asleep') continue;
     const lp = pts[pts.length - 1], pv = pts[pts.length - 2] || [lp[0], lp[1] - 10];
@@ -521,10 +558,16 @@ function drawMarks(vis, trails, now) {
     const col = still ? C['ink-ghost'] : colorOf(a);
     drawAnt(lp[0] + wander, y, ang, col, st === 'working' && !reduced, now, st === 'lab');
     hits.push({ x: lp[0] + wander, y, r: 12, item: { ant: a, st, why } });
-    if (showLabels) {
-      c.font = '600 11px "Barlow Condensed", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
-      c.fillStyle = still ? C['ink-ghost'] : C.ink; c.fillText(a + (why ? ' · ' + why : ''), lp[0] + wander + 12, y - 10);
-    }
+    if (showLabels) labels.push({ x: lp[0] + 10, y: y - 10, txt: a + (why && colW() >= 150 ? ' · ' + why : ''), col: still ? C['ink-ghost'] : C.ink });
+  }
+  c.font = '600 11px "Barlow Condensed", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const placed = [];
+  for (const l of labels.sort((p, q) => p.x - q.x)) {
+    const w = c.measureText(l.txt).width;
+    let y = l.y;  // step up until the label clears every label already placed
+    for (let k = 0; k < 12 && placed.some(q => l.x < q.x + q.w + 4 && q.x < l.x + w + 4 && Math.abs(q.y - y) < 12); k++) y -= 12;
+    placed.push({ x: l.x, y, w });
+    c.fillStyle = l.col; c.fillText(l.txt, l.x, y);
   }
 }
 
@@ -536,7 +579,8 @@ function ttyLine(p, fresh) {
     const kind = p.record ? '<span class="stamp">record</span>' : p.confirmed ? '<span class="stamp faint">confirmed</span>' : p.confirmed === false ? '<span class="stamp faint">not confirmed</span>' : '<span class="stamp faint">one batch</span>';
     return `<div class="line stampline${f}${hl}" data-id="${p.id}"><span>#${p.id} GATE ${esc(p.agent)} ${esc(p.policy)} <b>${num(p.score)}</b></span>${kind}</div>`;
   }
-  const edges = (p.refs || []).map(r => `<div class="edge">&nbsp;&nbsp;↳ ${esc(r[0])} #${r[1]}</div>`).join('');
+  const byKind = new Map(); for (const [k, id] of p.refs || []) (byKind.get(k) || byKind.set(k, []).get(k)).push('#' + id);
+  const edges = [...byKind].map(([k, ids]) => `<div class="edge">&nbsp;&nbsp;↳ ${esc(k)} ${ids.join(' ')}</div>`).join('');
   return `<div class="line${f}${hl}" data-id="${p.id}"><span class="hd${p.type === 'WARN' ? ' warn' : ''}">#${p.id} ${esc(p.who)} ${esc(p.type)}</span> ${esc((p.text || '').slice(0, 260))}${edges}</div>`;
 }
 function drawTty(force) {
@@ -624,8 +668,79 @@ function drawRoundline() {
   });
   svg.innerHTML = out;
 }
-$('drawer-stair').addEventListener('toggle', drawStair);
-$('drawer-round').addEventListener('toggle', drawRoundline);
+// genealogy: one lane per agent, derives-from edges as arcs; the current record's ancestry in gold
+function lineOf(g) {
+  const out = new Set(); if (!g) return out;
+  let cur = null; for (const p of S.posts) if (p.who === g.agent && p.t <= g.t + 120 && p.t >= g.t - 1 && (p.text || '').includes('#' + g.id)) { cur = p; break; }
+  while (cur && !out.has(cur.id)) { out.add(cur.id); cur = parentOf(cur); }
+  return out;
+}
+function drawGene() {
+  const svg = $('gene'); if (!$('drawer-gene').open) return;
+  const n = S.agents.length, rowH = Math.max(8, Math.min(20, 200 / Math.max(1, n))), h = 30 + n * rowH, [w] = svgEl(svg);
+  svg.style.height = h + 'px'; svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const t0 = T0(), t1 = Math.max(Tnow(), t0 + 60), X = t => 50 + (w - 66) * (t - t0) / (t1 - t0), Y = a => 14 + S.agents.indexOf(a) * rowH;
+  const lin = lineOf(bestAt());
+  let out = '';
+  S.agents.forEach(a => { out += `<line x1="50" x2="${w - 16}" y1="${Y(a)}" y2="${Y(a)}" stroke="${C.hair}"/><text x="44" y="${Y(a) + 3}" text-anchor="end" style="fill:${colorOf(a)}">${esc(a)}</text>`; });
+  for (const p of S.posts) {
+    const par = parentOf(p); if (!par || p.t > T || !S.agents.includes(p.who)) continue;
+    const pa = par.who || par.agent; if (!S.agents.includes(pa)) continue;
+    const x1 = X(par.t), y1 = Y(pa), x2 = X(p.t), y2 = Y(p.who), hot = lin.has(p.id), mx = (x1 + x2) / 2;
+    out += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${hot ? C.record : C.trail}" stroke-width="${hot ? 2 : 1}" opacity="${hot ? 1 : 0.6}"/>`;
+  }
+  for (const p of S.posts) {
+    if (p.t > T || !S.agents.includes(p.who)) continue;
+    const col = lin.has(p.id) ? C.record : p.type === 'WARN' ? C.dead : colorOf(p.who);
+    out += `<circle cx="${X(p.t)}" cy="${Y(p.who)}" r="${lin.has(p.id) ? 3.6 : 2.2}" fill="${col}"><title>#${p.id} ${esc(p.who)} ${esc(p.type)}</title></circle>`;
+  }
+  out += `<text x="50" y="${h - 4}">${fmt(0)}</text><text x="${w - 16}" y="${h - 4}" text-anchor="end">${fmt(t1 - t0)}</text>`;
+  svg.innerHTML = out;
+}
+// herding: the number of distinct lineages with a non-proposal post in the trailing window
+const HERD_WIN = 600;
+function drawHerd() {
+  const svg = $('herd'); if (!$('drawer-herd').open) return;
+  const [w, h] = svgEl(svg); svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const t0 = T0(), t1 = Math.max(Tnow(), t0 + 60), n = Math.max(1, S.agents.length);
+  const X = t => 40 + (w - 56) * (t - t0) / (t1 - t0), Y = v => h - 22 - (h - 36) * v / n;
+  const work = S.posts.filter(p => p.type !== 'PROPOSAL' && S.agents.includes(p.who));
+  const step = Math.max(10, (t1 - t0) / 240), pts = [];
+  for (let t = t0; t <= Math.min(T, t1) + 0.1; t += step) pts.push([t, new Set(work.filter(p => p.t > t - HERD_WIN && p.t <= t).map(rootOf)).size]);
+  let out = '';
+  for (const v of [0, Math.round(n / 2), n]) out += `<line x1="40" x2="${w - 16}" y1="${Y(v)}" y2="${Y(v)}" stroke="${C.hair}"/><text x="34" y="${Y(v) + 3}" text-anchor="end">${v}</text>`;
+  if (pts.length > 1) {
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1)).join('');
+    out += `<path d="${d}L${X(pts[pts.length - 1][0])},${Y(0)}L${X(pts[0][0])},${Y(0)}Z" fill="${C.measure}" opacity=".10"/><path d="${d}" fill="none" stroke="${C.measure}" stroke-width="1.6"/>`;
+    const l = pts[pts.length - 1]; out += `<circle cx="${X(l[0])}" cy="${Y(l[1])}" r="3.5" fill="${C.measure}"/><text x="${X(l[0]) - 6}" y="${Y(l[1]) - 8}" text-anchor="end">${l[1]} of ${n} lines alive (last ${HERD_WIN / 60} min)</text>`;
+  }
+  out += `<text x="40" y="${h - 4}">${fmt(0)}</text><text x="${w - 16}" y="${h - 4}" text-anchor="end">${fmt(t1 - t0)}</text>`;
+  svg.innerHTML = out;
+}
+// specialisation: each agent's calls by kind, as one stacked bar
+const CATS = [['experiment', ['score', 'submit', 'run', 'confirm'], 'cat-1'], ['shell', ['bash', 'write', 'edit', 'read', 'grep', 'glob'], 'cat-2'],
+  ['post', ['korax_post', 'korax_dm', 'post', 'dm'], 'cat-3'], ['read the board', ['korax_search', 'korax_read', 'korax_onboard', 'korax_ack', 'korax_fetch', 'search', 'fetch'], 'cat-4'],
+  ['wait', ['wait', 'jobs'], 'cat-5'], ['round', ['propose', 'answer'], 'cat-6'], ['thinking aloud', ['say'], 'cat-7']];
+function drawSpec() {
+  const svg = $('spec'); if (!$('drawer-spec').open) return;
+  const n = S.agents.length, rowH = Math.max(8, Math.min(18, 200 / Math.max(1, n))), h = 40 + n * rowH, [w] = svgEl(svg);
+  svg.style.height = h + 'px'; svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const bw = w - 66; let out = '';
+  S.agents.forEach((a, i) => {
+    const ev = (S.acts[a] || []).filter(e => e.t <= T), tot = ev.length || 1, y = 8 + i * rowH; let x = 50;
+    out += `<text x="44" y="${y + rowH / 2 + 2}" text-anchor="end" style="fill:${colorOf(a)}">${esc(a)}</text>`;
+    for (const [name, tools, col] of CATS) {
+      const k = ev.filter(e => tools.includes(e.tool)).length, ww = bw * k / tot;
+      if (ww > 0) out += `<rect x="${x}" y="${y}" width="${ww}" height="${rowH - 3}" fill="${C[col]}" opacity=".85"><title>${esc(a)}: ${k} ${name}</title></rect>`;
+      x += ww;
+    }
+  });
+  let lx = 50; for (const [name, , col] of CATS) { out += `<rect x="${lx}" y="${h - 14}" width="8" height="8" fill="${C[col]}"/><text x="${lx + 11}" y="${h - 7}">${name}</text>`; lx += name.length * 6 + 26; }
+  svg.innerHTML = out;
+}
+const drawers = [['drawer-stair', drawStair], ['drawer-gene', drawGene], ['drawer-herd', drawHerd], ['drawer-spec', drawSpec], ['drawer-round', drawRoundline]];
+const drawDrawers = () => drawers.forEach(([, f]) => f());
+drawers.forEach(([id, f]) => $(id).addEventListener('toggle', f));
 
 // ------------------------------------------------------------------ hover cards
 const card = $('card');
@@ -658,7 +773,7 @@ function setFollow(on) {
   follow = on && !ended(); if (follow) { playing = false; playB.textContent = 'play'; }
   liveB.classList.toggle('on', follow); liveB.disabled = ended(); liveB.textContent = ended() ? 'ended' : 'live';
 }
-function seek(t) { T = Math.max(T0(), Math.min(Tnow(), t)); setFollow(false); ttyCount = -1; dirtySand = true; uiTick(true); }
+function seek(t) { spoilT = null; T = Math.max(T0(), Math.min(Tnow(), t)); setFollow(false); ttyCount = -1; dirtySand = true; uiTick(true); drawDrawers(); }
 slider.addEventListener('input', () => seek(T0() + span() * slider.value / 1000));
 function toggle() {
   if (follow) setFollow(false);
@@ -705,7 +820,7 @@ async function poll() {
     S.seq = d.seq; S.live = d.agents || {}; S.spent = d.spent_total; S.boardError = d.board_error;
     S.serverNow = d.now; S.polledPerf = performance.now(); S.lastOkPerf = S.polledPerf; S.everOk = true; S.pollFailed = false;
     if (first) { T = Tnow(); setFollow(!ended()); ttyCount = -1; }
-    if (d.events.length) { dirtySand = true; ticks(); drawStair(); drawRoundline(); }
+    if (d.events.length) { dirtySand = true; ticks(); drawDrawers(); }
     if (ended() && !d.events.length) wait = 15000;
   } catch (e) {
     S.pollFailed = true; wait = 4000;
@@ -732,7 +847,8 @@ function frame(now) {
     if (b && b.record) { const [x, y] = chamberAt(b, vis); bestPt = [x, y, reduced ? 0.25 : 0.22 + 0.14 * Math.sin(now / 420)]; }
     drawSand(bestPt, now);
     drawMarks(vis, trails, now);
-    if (now - lastUi > 200) { uiTick(false); lastUi = now; if (playing || follow) { drawStair(); } }
+    spoil(vis, now); drawGrains(now, Math.min(0.05, (now - (frame.last || now)) / 1000)); frame.last = now;
+    if (now - lastUi > 200) { uiTick(false); lastUi = now; if (playing) drawDrawers(); }
   } else if (now - lastUi > 500) { hud(); lastUi = now; }
   requestAnimationFrame(frame);
 }
