@@ -1,4 +1,4 @@
-"""The panel's event log: /api/events folds transcripts, lab jobs, the round log and the board into
+"""The panel's event log: the events endpoint folds transcripts, lab jobs, the round log and the board into
 one append-only list, resumes by seq, never re-emits, and takes a half-written line only once it
 is whole."""
 import json

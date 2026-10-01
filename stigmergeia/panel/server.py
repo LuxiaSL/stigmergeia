@@ -5,13 +5,13 @@ job logs, the opening round's log) plus the board, and serves it at
 http://127.0.0.1:<port>/. Works for a live run or a finished one; it never
 writes anything. Stdlib only.
 
-Two JSON endpoints:
-  /api/state            a snapshot of every agent (the table view at /table)
-  /api/events?after=N   the run as one append-only event log, from seq N on:
+Two JSON endpoints, both GET on the panel's own port:
+  api/state             a snapshot of every agent (the table view)
+  api/events, after=N   the run as one append-only event log, from seq N on:
                         board posts and gate verdicts, round events, each
                         agent's tool calls, words, lab jobs and end. The
-                        formicarium (/) folds it; live and replay are the
-                        same fold, a finished run simply has no more events.
+                        formicarium (the index page) folds it; live and replay
+                        are the same fold, a finished run has no more events.
 """
 
 from __future__ import annotations
