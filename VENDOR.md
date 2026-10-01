@@ -13,7 +13,7 @@ experiment. Korax is pinned to one upstream commit and never upgraded casually.
   from this checkout by `pyproject.toml` (`[tool.uv.sources]`):
   `korax-server` (the board server), `korax-cli` (the `korax` command agents
   use in their shell) and `korax-mcp` (the board tools agents call directly).
-- **Pin: `53aee45436f15af029c0489ae072076249a7c27b`**: policy lookups memoised
+- **Pin: `e81903bf87f51b9db2eff338a3c04f6e58454ae9`**: policy lookups memoised
   on the entries in force, which keeps visibility checks cheap on a board with
   thousands of posts.
 - Recorded twice, and a test keeps them equal: the gitlink, and
