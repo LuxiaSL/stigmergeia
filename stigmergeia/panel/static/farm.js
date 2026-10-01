@@ -581,10 +581,26 @@ function drawMarks(vis, trails, now) {
   }
   // the ants: where each agent is now; labels laid out after, so two ants in one lineage never overprint
   const showLabels = colW() >= 40, labels = [];
+  // a crowd at the front: ants digging in one lineage fan out across its column, so a herd reads
+  // as a crowd of distinct ants rather than one smudge
+  const crowd = new Map();
+  for (const [a, pts] of trails) {
+    const st = statusAt(a)[0]; if (st === 'asleep' || st === 'quiet' || st === 'ended') continue;
+    const lp = pts[pts.length - 1], key = lp[2] ? rootOf(lp[2]) : a;
+    (crowd.get(key) || crowd.set(key, []).get(key)).push(a);
+  }
+  const fan = new Map();
+  for (const [key, ants] of crowd) {
+    if (ants.length < 2) continue;
+    const spread = Math.min(colW() * 0.8, ants.length * 16);
+    ants.sort((p, q) => S.agents.indexOf(p) - S.agents.indexOf(q))
+      .forEach((a, i) => fan.set(a, colX(key) + (i - (ants.length - 1) / 2) * spread / Math.max(1, ants.length - 1)));
+  }
   for (const [a, pts] of trails) {
     const [st, why] = statusAt(a); if (st === 'asleep') continue;
-    const lp = pts[pts.length - 1], pv = pts[pts.length - 2] || [lp[0], lp[1] - 10];
+    let lp = pts[pts.length - 1]; const pv = pts[pts.length - 2] || [lp[0], lp[1] - 10];
     const still = st === 'quiet' || st === 'ended';
+    if (fan.has(a)) lp = [fan.get(a), lp[1], lp[2]];
     const y = still ? lp[1] : Math.max(lp[1], G.FRONT - 2);
     const wander = still || reduced ? 0 : Math.sin(now / 1300 + S.agents.indexOf(a) * 1.7) * colW() * 0.08;
     const ang = still ? Math.atan2(lp[1] - pv[1], lp[0] - pv[0]) : Math.PI / 2 + Math.sin(now / 900 + S.agents.indexOf(a)) * 0.3;
@@ -598,7 +614,7 @@ function drawMarks(vis, trails, now) {
   for (const l of labels.sort((p, q) => p.x - q.x)) {
     const w = c.measureText(l.txt).width;
     let y = l.y;  // step up until the label clears every label already placed
-    for (let k = 0; k < 12 && placed.some(q => l.x < q.x + q.w + 4 && q.x < l.x + w + 4 && Math.abs(q.y - y) < 12); k++) y -= 12;
+    for (let k = 0; k < 12 && placed.some(q => l.x < q.x + q.w + 4 && q.x < l.x + w + 4 && Math.abs(q.y - y) < 12); k++) y = l.y - 12 * Math.ceil((k + 1) / 2) * (k % 2 ? -1 : 1) + (k % 2 ? 0 : 0);
     placed.push({ x: l.x, y, w });
     c.fillStyle = l.col; c.fillText(l.txt, l.x, y);
   }
