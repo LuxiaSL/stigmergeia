@@ -98,6 +98,8 @@ function rootOf(p) {
   return lineage.memo.get(p.id);
 }
 const parentOf = p => { const d = (p.refs || []).find(r => r[0] === 'derives-from'); return d ? S.byId.get(d[1]) : null; };
+// every parent: a post deriving from two lines is a merge, and each line gets its own thread
+const parentsOf = p => (p.refs || []).filter(r => r[0] === 'derives-from').map(r => S.byId.get(r[1])).filter(Boolean);
 
 // ------------------------------------------------------------------ the clock
 let T = 0, follow = true, playing = false, speed = 20, lastFrame = 0;
@@ -525,8 +527,8 @@ function drawMarks(vis, trails, now) {
   hits = [];
   drawRuler(); drawSky(now);
   // borrowed code: amber arcs breaking into another column, bright when fresh
-  for (const p of vis) {
-    const par = parentOf(p); if (!par || par.t > T) continue;
+  for (const p of vis) for (const par of parentsOf(p)) {
+    if (par.t > T) continue;
     const [x0, y0] = par.gate ? chamberAt(par, vis) : ptOf(par), [x1, y1] = ptOf(p), age = T - p.t;
     c.strokeStyle = C.trail; c.globalAlpha = Math.max(0.4, Math.exp(-age / 40)); c.lineWidth = 1.4 + 2 * Math.exp(-age / 10);
     c.beginPath(); c.moveTo(x0, y0); c.bezierCurveTo(x0, y0 + (y1 - y0) * 0.6, x1, y1 - (y1 - y0) * 0.6, x1, y1); c.stroke();
@@ -721,7 +723,8 @@ function drawRoundline() {
 function lineOf(g) {
   const out = new Set(); if (!g) return out;
   let cur = null; for (const p of S.posts) if (p.who === g.agent && p.t <= g.t + 120 && p.t >= g.t - 1 && (p.text || '').includes('#' + g.id)) { cur = p; break; }
-  while (cur && !out.has(cur.id)) { out.add(cur.id); cur = parentOf(cur); }
+  const stack = cur ? [cur] : [];  // the whole ancestry: every parent of every merge
+  while (stack.length) { const q = stack.pop(); if (out.has(q.id)) continue; out.add(q.id); stack.push(...parentsOf(q)); }
   return out;
 }
 function drawGene() {
@@ -732,8 +735,8 @@ function drawGene() {
   const lin = lineOf(bestAt());
   let out = '';
   S.agents.forEach(a => { out += `<line x1="50" x2="${w - 16}" y1="${Y(a)}" y2="${Y(a)}" stroke="${C.hair}"/><text x="44" y="${Y(a) + 3}" text-anchor="end" style="fill:${colorOf(a)}">${esc(a)}</text>`; });
-  for (const p of S.posts) {
-    const par = parentOf(p); if (!par || p.t > T || !S.agents.includes(p.who)) continue;
+  for (const p of S.posts) for (const par of parentsOf(p)) {
+    if (p.t > T || !S.agents.includes(p.who)) continue;
     const pa = par.who || par.agent; if (!S.agents.includes(pa)) continue;
     const x1 = X(par.t), y1 = Y(pa), x2 = X(p.t), y2 = Y(p.who), hot = lin.has(p.id), mx = (x1 + x2) / 2;
     out += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${hot ? C.record : C.trail}" stroke-width="${hot ? 2 : 1}" opacity="${hot ? 1 : 0.6}"/>`;
