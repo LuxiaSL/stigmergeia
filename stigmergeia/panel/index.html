@@ -87,7 +87,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ago = (s) => s == null ? "–" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s/60)}m` : `${(s/3600).toFixed(1)}h`;
 const money = (x) => `$${Number(x).toFixed(2)}`;
-const statusClass = (s) => ({ "working":"s-working", "waiting on tool":"s-waiting", "idle":"s-idle",
+const statusClass = (s) => ({ "working":"s-working", "waiting on tool":"s-waiting", "waiting on the lab":"s-idle", "idle":"s-idle",
   "quiet":"s-quiet", "sleeping":"s-quiet", "blocked":"s-quiet", "ended":"s-ended", "not started":"s-ended" }[s] || "s-err");
 const openPosts = new Set();
 

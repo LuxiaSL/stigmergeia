@@ -160,6 +160,7 @@ function statusAt(a) {
     if (s === 'idle') return ['waiting', 'waiting on the board'];
     if (s === 'sleeping') return ['sleeping', 'sleeping'];
     if (s === 'blocked') return ['lab', 'blocked in the lab'];
+    if (s === 'waiting on the lab') return ['lab', 'waiting on its jobs'];
     if (s === 'quiet') return ['quiet', 'quiet'];
     if (s === 'waiting on tool' && /mcp__lab__/.test(S.live[a].detail || '')) return ['lab', 'in the lab'];
     if (S.live[a].jobs > 0) return ['working', `${S.live[a].jobs} in the lab`];

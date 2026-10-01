@@ -80,7 +80,10 @@ def _long_sleep(call: dict[str, Any]) -> bool:
 
 
 def _is_lab(call: dict[str, Any]) -> bool:
-    return str(call.get("tool", "")).startswith("mcp__lab__")
+    """A lab call that holds the agent's turn. The lab's own wait is not one: it is waiting by
+    choice on background jobs, counted apart (as stigmergeia.analysis.idle counts it)."""
+    tool = str(call.get("tool", ""))
+    return tool.startswith("mcp__lab__") and tool != "mcp__lab__wait"
 
 
 def _epoch(ts: str) -> float:
@@ -327,6 +330,10 @@ class Panel:
                     c = next(c for c in reversed(pending) if _long_sleep(c))
                     status = "sleeping"
                     detail = f"in-turn sleep for {int(now - c['t'])}s: {c['what'][:100]}"
+                elif pending and any(c.get("tool") == "mcp__lab__wait" for c in pending):
+                    c = next(c for c in reversed(pending) if c.get("tool") == "mcp__lab__wait")
+                    status = "waiting on the lab"
+                    detail = f"in the lab's wait for {int(now - (c['t'] or now))}s, {len(v.jobs)} job(s) running"
                 elif pending and any(_is_lab(c) and now - (c["t"] or now) >= BLOCKED_AFTER_S for c in pending):
                     # blocked in a lab call: a synchronous submit or run holds the agent's whole turn until it returns
                     c = next(c for c in reversed(pending) if _is_lab(c) and now - (c["t"] or now) >= BLOCKED_AFTER_S)
