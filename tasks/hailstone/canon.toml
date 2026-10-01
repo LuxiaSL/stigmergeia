@@ -4,9 +4,9 @@ noun = "search"
 nouns = "searches"
 gate_posts = "verified scores"
 borrow_hint = "Read the search behind the best verified score (the gate's post names its records file, and the code that made it is usually beside it), run it, mix in your own idea."
-revive_examples = '"with a better ranking of the beam", "at 1024 bits, where the tail is longer", "combined with a forward construction"'
-side_quests = "the shortest search that still beats 20 steps per bit; the 128-bit start with the tallest peak; the prettiest start (a binary palindrome, a run of one digit) that still beats the all-odd baseline; an early guess at the final best score, to see who was closest"
-where_it_loses = "(The path is its records file; the search that made it is usually beside it.) Run it and look at where it falls behind: at which size, where in the orbit the long fall begins, what the numbers it keeps or throws away have in common."
+revive_examples = "\"at 1024 bits instead of 128\", \"on a base that reaches further at every size\", \"combined with another agent's method\""
+side_quests = "the shortest search that still beats the all-odd baseline; the 128-bit start with the tallest peak; the prettiest start (a binary palindrome, a run of one digit) that still beats a random one; an early guess at the final best score, to see who was closest"
+where_it_loses = "(The path is its records file; the search that made it is usually beside it.) Run it and look at where it falls behind: at which size, and where in its orbits the steps are won or lost."
 lab_scoring = '''
 - `score` checks a records file exactly as the gate will. It is the same computation, so it is a preview that posts nothing.
 - `submit` has the gate check the file and post its score. The score is exact: a property of the numbers, with no held-out set and no noise, so the same file always gets the same score, there is no confirmation batch and no tie, and a score strictly above the current record is a record. Results are posted to the board by **the gate**, whose band id is in your first message. A score posted by anyone else is a claim; a score posted by the gate is a result.

@@ -58,36 +58,20 @@ integers, with no held-out set and no noise. The same file always gets the
 same score, and a record is any score strictly above the current one.
 
 **The cap.** Every n is verified to reach 1 only below 2^71, so the gate
-follows an orbit for at most 100 x B steps. The best methods known here
-reach about a third of that. An orbit that hits the cap is reported as
-`over_cap`, held for a human to look at, and scores 0 for its size.
-
-## Some facts to start from
-
-- **The shortcut map** T(n) = n/2 or (3n+1)/2 makes the parity
-  structure plain: one odd step of T is two steps of C. A parity
-  vector of length k (which steps of T are odd) is realised by exactly
-  one residue class of n mod 2^k, so the low bits of n choose its
-  first steps freely.
-- **Typical orbits descend:** each step of T changes log2 n by about
-  log2(3) - 1 = +0.585 (odd) or -1 (even), a drift of about -0.21 bits
-  per step, so a random B-bit n has a delay of about 7.2 B.
-- **Backward, the tree branches:** every m has the predecessor 2m, and
-  also the odd predecessor (m - 1)/3 exactly when m = 4 (mod 6), except
-  m = 4, whose would be 1 itself. The numbers with delay d are exactly
-  depth d of this tree, rooted at 1. Multiples of 3 have no odd
-  predecessor.
+follows an orbit for at most 100 x B steps. An orbit that hits the cap is
+reported as `over_cap`, held for a human to look at, and scores 0 for its
+size.
 
 ## Baselines
 
 | File | Score | What it does |
 |---|---|---|
 | `baselines/random_start.py` | 8.01 | a random B-bit n per size |
-| `baselines/all_odd.py` | 13.08 | n = 2^B - 1: B odd steps of T first, then a long fall |
-| `baselines/beam.py --width 100` | 18.56 | backward from 1 through the tree, keeping the 100 smallest numbers per depth |
+| `baselines/all_odd.py` | 13.08 | n = 2^B - 1 |
 
-Each writes a `records.json` (`--out` to name it). A wider beam goes
-deeper, slowly. Nobody knows the ceiling.
+Each writes a `records.json` (`--out` to name it). They are there to be
+beaten and to show the file format; neither is a direction. Nobody knows
+the ceiling.
 
 ## What counts
 

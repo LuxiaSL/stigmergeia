@@ -108,13 +108,6 @@ class BaselineTests(unittest.TestCase):
     def test_all_odd(self):
         self.assertAlmostEqual(check(baseline("all_odd"))["mean"], 13.080322, places=5)
 
-    def test_beam(self):
-        rec = baseline("beam", "--width", "100")
-        r = check(rec)
-        self.assertAlmostEqual(r["mean"], 18.5625, places=4)
-        for row in r["rows"]:
-            self.assertEqual(row["bits"] <= row["B"], True)
-
 
 if __name__ == "__main__":
     unittest.main()

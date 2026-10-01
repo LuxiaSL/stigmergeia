@@ -1,9 +1,5 @@
 """Baseline: n = 2^B - 1 for each size.
 
-Its first B steps of the shortcut map T(n) = (3n+1)/2 are all odd, so the
-value grows to about 3^B before the orbit turns into an ordinary random-looking
-descent: about 2B steps up front, then a long tail from a big number.
-
   python all_odd.py [--out records.json]
 """
 import argparse
