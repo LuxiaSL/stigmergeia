@@ -1,17 +1,28 @@
 """swarm panel CONFIG — a live local page showing every agent in a run.
 
-Reads what the run already writes (per-agent transcripts and audit logs)
-plus the board, and serves it at http://127.0.0.1:<port>/ with a JSON
-endpoint the page polls. Works for a live run or a finished one; it never
+Reads what the run already writes (per-agent transcripts, audit logs and lab
+job logs, the opening round's log) plus the board, and serves it at
+http://127.0.0.1:<port>/. Works for a live run or a finished one; it never
 writes anything. Stdlib only.
+
+Two JSON endpoints:
+  /api/state            a snapshot of every agent (the table view at /table)
+  /api/events?after=N   the run as one append-only event log, from seq N on:
+                        board posts and gate verdicts, round events, each
+                        agent's tool calls, words, lab jobs and end. The
+                        formicarium (/) folds it; live and replay are the
+                        same fold, a finished run simply has no more events.
 """
 
 from __future__ import annotations
 
+import datetime
 import json
+import mimetypes
 import re
 import threading
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,7 +32,11 @@ from .. import board
 from ..agent import slot_paths
 from ..config import RunConfig
 
-HTML = Path(__file__).with_name("index.html")
+HERE = Path(__file__).parent
+HTML = HERE / "static" / "index.html"
+TABLE_HTML = HERE / "index.html"
+STATIC = HERE / "static"
+BOARD_PAGE = 500  # envelopes per board read; reads repeat until the board is drained
 BLOCKED_AFTER_S = 180  # a lab call this long is the agent BLOCKED on it (the default of stigmergeia.analysis.idle --blocked-min 3)
 
 
@@ -68,6 +83,15 @@ def _is_lab(call: dict[str, Any]) -> bool:
     return str(call.get("tool", "")).startswith("mcp__lab__")
 
 
+def _epoch(ts: str) -> float:
+    return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+
+
+def _short_tool(name: str) -> str:
+    """`mcp__lab__score` -> `score`; built-in tools keep their names, lowercased."""
+    return name.rsplit("__", 1)[-1].lower()
+
+
 def _summarise_call(name: str, inp: dict[str, Any]) -> str:
     for key in ("command", "policy", "file_path", "pattern", "ns", "payload", "query"):
         if key in inp:
@@ -92,10 +116,15 @@ class Panel:
         except (OSError, ValueError):
             pass  # not provisioned yet: the page says so
         self.board_cache: dict[str, Any] = {"posts": [], "gate": [], "error": None, "t": 0.0}
+        self.board_since = -1   # the last envelope id folded; board reads are incremental
+        self.round_offset = 0
+        self.events: list[dict[str, Any]] = []  # append-only; an event's seq is its index
+
+    def _emit(self, ev: dict[str, Any]) -> None:
+        self.events.append(ev)
 
     # -- the lab's own job log (private/<agent>/lab-jobs.jsonl)
-    @staticmethod
-    def _fold_job(v: AgentView, row: dict[str, Any]) -> None:
+    def _fold_job(self, v: AgentView, row: dict[str, Any]) -> None:
         ev, job = row.get("event"), row.get("job")
         if not job:
             return
@@ -103,10 +132,14 @@ class Panel:
             kind = row.get("kind") or ("run" if ev == "run" else "submit")
             v.jobs[job] = {"id": job, "kind": kind, "what": str(row.get("label") or row.get("policy") or "")[:160],
                            "t": row.get("t")}
+            self._emit({"k": "job", "t": row.get("t"), "agent": v.name, "job": job, "kind": kind,
+                        "what": v.jobs[job]["what"], "phase": "start"})
         elif ev == "finished" and row.get("background"):
             v.jobs.pop(job, None)
             v.bg_s += float(row.get("took_s") or 0.0)
             v.bg_done += 1
+            self._emit({"k": "job", "t": row.get("t"), "agent": v.name, "job": job, "kind": row.get("kind"),
+                        "phase": "finish", "took_s": row.get("took_s")})
 
     # -- transcripts
     def _fold(self, v: AgentView, row: dict[str, Any]) -> None:
@@ -128,8 +161,11 @@ class Panel:
                             "background": bool(b["input"].get("run_in_background")), "done": False}
                     v.calls.append(call)
                     v.open_calls[b.get("id", "")] = call
+                    self._emit({"k": "act", "t": t, "agent": v.name, "tool": _short_tool(b["name"]),
+                                "what": call["what"][:160]})
                 elif "text" in b and b["text"].strip():
                     v.last_text, v.last_text_t = b["text"], t
+                    self._emit({"k": "say", "t": t, "agent": v.name, "text": b["text"][:600]})
         elif kind == "UserMessage":
             for b in row.get("content") or []:
                 if isinstance(b, dict) and "tool_use_id" in b:
@@ -148,11 +184,13 @@ class Panel:
             v.banked, v.running = v.banked + v.running, 0.0
             if kind == "harness_error":
                 v.errors.append(str(row.get("error", ""))[:300])
+                self._emit({"k": "error", "t": t, "agent": v.name, "text": str(row.get("error", ""))[:300]})
         elif kind == "harness_idle_wait":
             v.idle_waits += 1
             v.idle_until = (t or time.time()) + float(row.get("seconds", 0))
         elif kind == "agent_end":
             v.ended = row.get("stop_reason") or "ended"
+            self._emit({"k": "end", "t": t, "agent": v.name, "why": v.ended})
 
     def refresh(self) -> None:
         for i in range(self.cfg.n_agents):
@@ -179,13 +217,32 @@ class Panel:
                         if attr == "offset":
                             self._fold(v, row)
                         elif attr == "jobs_offset":
-                            self._fold_job(v, row)
+                            self._fold_job(v, row)  # noqa: also emits job events
                         elif row.get("outside"):
                             v.outside.append(row)
                     setattr(v, attr, pos)
+        self.round_offset = self._fold_lines(self.cfg.run_dir / "opening_round.jsonl", self.round_offset,
+                                             lambda row: self._emit({"k": "round", **row}))
         now = time.time()
         if now - self.board_cache["t"] > 5 and self.creds:
             self._refresh_board()
+
+    @staticmethod
+    def _fold_lines(f: Path, pos: int, fold) -> int:
+        """Fold the complete JSON lines of `f` from byte offset `pos`; returns the new offset."""
+        if not f.exists():
+            return pos
+        with f.open("rb") as fh:
+            fh.seek(pos)
+            while True:
+                line = fh.readline()
+                if not line.endswith(b"\n"):
+                    return pos  # EOF, or a line still being written: take it next time
+                pos += len(line)
+                try:
+                    fold(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
 
     def _refresh_board(self) -> None:
         cred = next(iter(self.creds.values()))
@@ -193,23 +250,62 @@ class Panel:
         if self.gate:
             names[self.gate.identity] = "GATE"
         try:
-            envs = board._request(f"{cred.url}/read?ns={self.cfg.board.ns}&since=-1&limit=1000", cred.token)["envelopes"]
-            posts, gate = [], []
-            for e in envs:
-                p = e.get("payload")
-                who = names.get(e["author"], e["author"][-6:])
-                if isinstance(p, dict) and p.get("kind") == "gate-result":
-                    gate.append({"id": e["id"], "ts": e["ts"], "agent": p.get("agent"), "policy": p.get("policy"),
-                                 "score": p.get("score", p.get("mean")), "ci95": p.get("ci95"),
-                                 "confirmed": p.get("confirmed"), "ends": p.get("ends")})
-                    continue
-                text = p if isinstance(p, str) else (p.get("text") if isinstance(p, dict) and "text" in p else json.dumps(p))
-                posts.append({"id": e["id"], "ts": e["ts"], "who": who, "type": e["type"],
-                              "refs": [f"{r['edge']} #{r['id']}" for r in e["refs"]],
-                              "text": (text or "")[:1200], "evidence": e.get("evidence")})
-            self.board_cache = {"posts": posts, "gate": gate, "error": None, "t": time.time()}
+            while True:
+                envs = board._request(f"{cred.url}/read?ns={self.cfg.board.ns}&since={self.board_since}"
+                                      f"&limit={BOARD_PAGE}", cred.token)["envelopes"]
+                for e in envs:
+                    self._fold_envelope(e, names)
+                    self.board_since = max(self.board_since, int(e["id"]))
+                if len(envs) < BOARD_PAGE:
+                    break
+            self.board_cache.update(error=None, t=time.time())
         except Exception as ex:  # the page shows the error; it never crashes the panel
             self.board_cache.update(error=f"{type(ex).__name__}: {ex}", t=time.time())
+
+    def _fold_envelope(self, e: dict[str, Any], names: dict[str, str]) -> None:
+        p = e.get("payload")
+        who = names.get(e["author"], e["author"][-6:])
+        t = _epoch(e["ts"])
+        refs = [[r["edge"], r["id"]] for r in e.get("refs") or []]
+        if isinstance(p, dict) and p.get("kind") == "gate-result":
+            g = {"id": e["id"], "ts": e["ts"], "agent": p.get("agent"), "policy": p.get("policy"),
+                 "score": p.get("score", p.get("mean")), "ci95": p.get("ci95"),
+                 "confirmed": p.get("confirmed"), "record": bool(p.get("record")), "ends": p.get("ends")}
+            self.board_cache["gate"].append(g)
+            self._emit({"k": "gate", "t": t, "refs": refs, **g})
+            return
+        text = p if isinstance(p, str) else (p.get("text") if isinstance(p, dict) and "text" in p else json.dumps(p))
+        post = {"id": e["id"], "ts": e["ts"], "who": who, "type": e["type"],
+                "refs": [f"{r[0]} #{r[1]}" for r in refs], "text": (text or "")[:1200], "evidence": e.get("evidence")}
+        self.board_cache["posts"].append(post)
+        self._emit({"k": "post", "t": t, "id": e["id"], "who": who, "type": e["type"], "refs": refs,
+                    "text": (text or "")[:2000], "evidence": e.get("evidence")})
+
+    def meta(self) -> dict[str, Any]:
+        manifest: dict[str, Any] = {}
+        try:
+            manifest = json.loads((self.cfg.run_dir / "run-manifest.json").read_text())
+        except (OSError, ValueError):
+            pass
+        agents = []
+        for i in range(self.cfg.n_agents):
+            a = self.cfg.agent_config(i)
+            agents.append({"name": self.cfg.agent_name(i), "backend": a.backend, "model": a.model})
+        return {"run": self.cfg.run_name, "ns": self.cfg.board.ns, "task": self.cfg.task_dir.name,
+                "agents": agents, "higher_is_better": self.cfg.gate.higher_is_better,
+                "wall_hours": self.cfg.max_wall_hours, "budget_total": self.cfg.total_budget_usd,
+                "started": manifest.get("started"), "ended": manifest.get("ended")}
+
+    def events_since(self, after: int) -> dict[str, Any]:
+        """The event log from seq `after` on, plus what the fold can't carry: who is doing what now."""
+        st = self.state()  # refreshes every source under the lock
+        with self.lock:
+            after = max(0, min(after, len(self.events)))
+            return {"meta": self.meta(), "now": st["now"], "seq": len(self.events),
+                    "events": self.events[after:], "board_error": st["board_error"],
+                    "spent_total": st["spent_total"],
+                    "agents": {a["name"]: {"status": a["status"], "detail": a["detail"], "spent": a["spent"],
+                                           "jobs": len(a["jobs"])} for a in st["agents"]}}
 
     def state(self) -> dict[str, Any]:
         with self.lock:
@@ -286,14 +382,35 @@ def serve(cfg: RunConfig, port: int) -> None:
             self.end_headers()
             self.wfile.write(body)
 
+        def _json(self, fn) -> None:
+            try:
+                self._send(200, json.dumps(fn()).encode(), "application/json")
+            except Exception as ex:
+                self._send(500, json.dumps({"error": f"{type(ex).__name__}: {ex}"}).encode(), "application/json")
+
         def do_GET(self) -> None:
-            if self.path.startswith("/api/state"):
+            path, _, query = self.path.partition("?")
+            if path == "/api/state":
+                self._json(panel.state)
+            elif path == "/api/events":
+                q = urllib.parse.parse_qs(query)
                 try:
-                    self._send(200, json.dumps(panel.state()).encode(), "application/json")
-                except Exception as ex:
-                    self._send(500, json.dumps({"error": f"{type(ex).__name__}: {ex}"}).encode(), "application/json")
-            elif self.path in ("/", "/index.html"):
+                    after = int(q.get("after", ["0"])[0])
+                except ValueError:
+                    after = 0
+                self._json(lambda: panel.events_since(after))
+            elif path in ("/", "/index.html"):
                 self._send(200, HTML.read_bytes(), "text/html; charset=utf-8")
+            elif path == "/table":
+                self._send(200, TABLE_HTML.read_bytes(), "text/html; charset=utf-8")
+            elif path.startswith("/static/"):
+                f = (STATIC / path.removeprefix("/static/")).resolve()
+                if f.is_file() and f.is_relative_to(STATIC.resolve()):
+                    ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+                    self._send(200, f.read_bytes(), ctype + ("; charset=utf-8" if ctype.startswith("text/") or
+                                                             ctype.endswith("javascript") else ""))
+                else:
+                    self._send(404, b"not found", "text/plain")
             else:
                 self._send(404, b"not found", "text/plain")
 

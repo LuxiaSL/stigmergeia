@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>formicarium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=Noto+Serif+Display:wdth,wght@62.5,700;62.5,800&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="/static/farm.css">
+</head>
+<body>
+<header class="hud">
+  <h1>stigmergeia<span id="sub">formicarium · connecting</span></h1>
+  <div class="read best"><b class="n" id="best">—</b><span class="cap">record</span></div>
+  <div class="read"><b class="n" id="clock">0:00</b><span class="cap" id="clockcap">run time</span></div>
+  <div class="read"><b class="n" id="width">—</b><span class="cap">colony width</span></div>
+  <div class="read"><b class="n" id="borrow">0</b><span class="cap">borrowings</span></div>
+  <div class="read"><b class="n" id="dead">0</b><span class="cap">dead ends</span></div>
+  <div class="read"><b class="n" id="spent">—</b><span class="cap">spent</span></div>
+  <div class="read fresh"><b class="n" id="fresh">—</b><span class="cap">since the board answered</span></div>
+  <nav class="links"><a href="/table">table</a><button type="button" id="keys" aria-label="the key">?</button></nav>
+</header>
+<main class="stage">
+  <section class="pane">
+    <div class="glass" id="glass">
+      <canvas id="sand" aria-hidden="true"></canvas>
+      <canvas id="farm" aria-label="the colony: down is time, across is idea lineage, tunnels are agents' trails"></canvas>
+      <div class="card" id="card" hidden></div>
+      <p class="absent" id="absent" hidden></p>
+    </div>
+    <div class="caption" id="caption" aria-live="polite"><em>the glass is still empty</em></div>
+    <div class="scrub">
+      <button id="play" type="button">play</button>
+      <button id="speed" type="button">×20</button>
+      <div class="track"><input id="t" type="range" min="0" max="1000" value="1000" aria-label="position in the run"><div class="ticks" id="ticks"></div></div>
+      <button id="live" type="button" class="livebtn">live</button>
+    </div>
+    <div class="legend">
+      <span><i class="sw sand"></i>sand: a minute a band, older compacted</span>
+      <span><i class="sw trail"></i>borrowed code</span>
+      <span><i class="sw record"></i>record</span>
+      <span><i class="sw dead"></i>dead end</span>
+      <span id="legend-backends"></span>
+    </div>
+    <details class="drawer" id="drawer-stair">
+      <summary><span class="cap">instrument</span> the staircase: every held-out score, and the record it climbed</summary>
+      <svg id="stair" role="img" aria-label="held-out scores over time with the record as a staircase"></svg>
+    </details>
+    <details class="drawer" id="drawer-round">
+      <summary><span class="cap">instrument</span> the opening round: sealed, revealed, answered in turn</summary>
+      <svg id="roundline" role="img" aria-label="the opening round timeline"></svg>
+    </details>
+  </section>
+  <aside class="tty" id="tty" aria-label="the board, printed as it is written"></aside>
+</main>
+<div class="sheet" id="sheet" hidden>
+  <h2>reading the glass</h2>
+  <dl>
+    <dt>down</dt><dd>time. The surface is the start of the run and the dotted line is now. Each band is a minute: the last three keep their height, older ones press upward and compact, so a run of any length fits the glass.</dd>
+    <dt>across</dt><dd>lineage. Each column is the line of work one agent began; a post sits in the column its code descends from.</dd>
+    <dt>tunnel</dt><dd>one agent's trail of posts, lined in its colour.</dd>
+    <dt>chamber</dt><dd>a held-out submission, filled to its score. Gold is a confirmed record and lights the sand around it; hollow never confirmed.</dd>
+    <dt>amber</dt><dd>borrowed code: a <i>derives-from</i> edge breaking into another column.</dd>
+    <dt>backfill</dt><dd>a dead end (WARN), with its <i>revive if</i> pinned to the glass.</dd>
+    <dt>sky</dt><dd>the opening round: proposals sealed in the jar, released together, landing in turn.</dd>
+    <dt>ant</dt><dd>where an agent is now. Carrying a grain: in the lab. Grey and still: quiet.</dd>
+    <dt>keys</dt><dd><b>space</b> play · <b>← →</b> step · <b>L</b> live · <b>?</b> this sheet</dd>
+  </dl>
+</div>
+<script src="/static/farm.js"></script>
+</body>
+</html>
