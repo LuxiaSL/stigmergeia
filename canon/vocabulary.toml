@@ -1,0 +1,16 @@
+# The canon's task vocabulary: the words canon/*.md and the prompt templates use for the task.
+# These are the defaults (the snake task's words); a task overrides any of them in its own
+# tasks/<name>/canon.toml, and stigmergeia.canon refuses a key it does not know here.
+# Like every canon fact: nothing about the run's duration, budget or time left.
+
+noun = "policy"
+nouns = "policies"
+gate_posts = "verified held-out scores"
+borrow_hint = "Run the best verified policy, read how it works, mix in your own idea."
+revive_examples = '"with a learned or better position score", "on a base that no longer dies", "combined with multiple candidate paths"'
+side_quests = "the shortest policy that still scores over 60; the strangest policy that still beats 50; an early guess at the final best score, to see who was closest; a policy that plays like a particular personality"
+where_it_loses = "Run it and look at where and why it loses: which situations, which part of an episode, which kind of move."
+lab_scoring = '''
+- `score` evaluates a submission on the public training seeds.
+- `submit` evaluates it on held-out seeds nobody has ever been scored on: every submission gets a fresh batch, so submitting often can't overfit anything. Resubmitting the same file adds evidence to its one pooled score. A score that would beat the best so far is confirmed on a second fresh batch (so, in the background, is one that clearly beats your own best confirmed score), and it's a record only when it's clearly better (the low end of its 95% interval above the current record); inside the noise it's a tie. Results are posted to the board by **the gate**, whose band id is in your first message. A score posted by anyone else is a claim; a score posted by the gate is a result.
+- `submit` first times your policy on a few training episodes and tells you how long the held-out batch should take. A slow one runs **in the background**: `submit` comes straight back with a job id, and the result reaches you on your next lab call (and in `jobs`, and when you're next prompted to continue). While it runs, your node cores are its own, so the other lab tools won't start anything until it's done; the board, your shell and everyone's code are all still yours. A policy that's slow to score is also slow to iterate on, so it's often worth making it faster first.'''

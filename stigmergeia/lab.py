@@ -859,7 +859,8 @@ class Lab:
         prior.append({"seed_range": s1.get("seed_range"), "mean": s1["mean"], "std": s1["std"], "episodes": s1["episodes"]})
         batches = list(prior)
         ends = dict(s1["ends"])
-        confirmed = len(batches) >= 2  # these bytes already have an independent batch
+        # these bytes already have an independent batch; an exact score needs no second one
+        confirmed = len(batches) >= 2 or self.cfg.gate.exact
         # The lock guards READING and UPDATING the record only. It is never
         # held across a batch: a confirmation can take most of an hour, and
         # every other agent's finished submission would queue behind it.
@@ -957,7 +958,7 @@ class Lab:
                               ends: dict, confirmed: bool, auto: bool) -> dict[str, Any]:
         """Pool, judge against the record, post as the gate, and word the result."""
         record = False
-        score, ci = _pooled(batches, self.cfg.gate.run_sd)
+        score, ci = _pooled(batches, self.cfg.gate.run_sd, self.cfg.gate.exact)
         hib = self.cfg.gate.higher_is_better
         # the end of the interval nearest to "worse": it must clear the record
         cautious, hopeful = (ci[0], ci[1]) if hib else (ci[1], ci[0])
@@ -966,7 +967,7 @@ class Lab:
             # interval clears the current record. Inside the noise is a tie.
             if confirmed and self._better(cautious, self.record):
                 self.record, record = score, True
-            tie = (confirmed and not record and self.record is not None
+            tie = (confirmed and not record and self.record is not None and not self.cfg.gate.exact
                    and not self._better(self.record, hopeful))
             if confirmed:
                 self._note_agent_best(slot.name, score)
@@ -983,7 +984,9 @@ class Lab:
         except Exception as e:  # never lose a finished held-out result to a board hiccup
             posted = f"\n[harness: result NOT posted to the board ({type(e).__name__}: {e}); it is saved at {snap}]"
         worse = "below" if hib else "above (lower is better)"
-        head = ("NEW RECORD: significantly better than the previous best, on fresh seeds" if record else
+        exact = self.cfg.gate.exact
+        head = ("NEW RECORD: better than the previous best (the score is exact)" if record and exact else
+                "NEW RECORD: significantly better than the previous best, on fresh seeds" if record else
                 f"ties the record {self.record} within noise" if tie else
                 f"{worse} the record {self.record}" if confirmed else
                 # agents misread an unconfirmed batch as a missing or a counted result, so the head names it
@@ -992,7 +995,8 @@ class Lab:
                    f" (the record is {self.record}; the lab confirms a batch that could beat it)"
                    if self.record is not None else "")
                 + ". Resubmitting this exact file adds a batch to its pooled score.")
-        head += f" [{len(batches)} batch{'es' if len(batches) != 1 else ''} pooled for this exact file]"
+        if not exact:
+            head += f" [{len(batches)} batch{'es' if len(batches) != 1 else ''} pooled for this exact file]"
         return _text(f"{head}\n{json.dumps(result, indent=2)}{posted}")
 
 
@@ -1006,8 +1010,12 @@ def own_relative(name: str, policy: str) -> str:
     return policy
 
 
-def _pooled(batches: list[dict], run_sd: float | None = None) -> tuple[float, list[float]]:
+def _pooled(batches: list[dict], run_sd: float | None = None, exact: bool = False) -> tuple[float, list[float]]:
     """Pooled mean and 95% CI over batches, from their means and stds.
+
+    exact: the gate's score is exact (gate.exact), so every batch of one file
+    is the same number. It is returned at the gate's own precision with a
+    zero-width interval: rounding it here could erase a one-step record.
 
     run_sd None: every episode is one independent draw (snake), so batches
     pool as one big sample. run_sd set: each batch is ONE training run whose
@@ -1016,6 +1024,9 @@ def _pooled(batches: list[dict], run_sd: float | None = None) -> tuple[float, li
     w_b = n_b / N and s = max(run_sd, the observed sd of the batch means):
     two runs say little about their own spread, so a calibrated floor is
     used unless the runs disagree by more."""
+    if exact:
+        M = batches[-1]["mean"]
+        return M, [M, M]
     N = sum(b["episodes"] for b in batches)
     M = sum(b["mean"] * b["episodes"] for b in batches) / N
     if run_sd is not None:
@@ -1135,13 +1146,22 @@ def lab_tool_specs(lab: Lab, slot: AgentSlot, cred: board.Credential | None = No
                      **({} if after is None else {"background": {
                          "type": "boolean", "description": "start it in the background and get a job id at once"}})},
                   "required": ["command"]}, run),
-        ToolSpec("score", "Score a policy file on the public TRAINING seeds with the task gate.",
-                 {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, score),
-        ToolSpec("submit", "Score a policy on the HELD-OUT seeds. The result is posted to the board by the "
-                 "gate and is the only score that counts. The policy is first timed on a few training episodes; "
-                 "a slow one runs in the background (this call then returns at once with a job id, and the "
-                 "result comes to you on a later lab call and in `jobs`).",
-                 {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, submit),
+        *((ToolSpec("score", "Check a submission file with the task gate, exactly as `submit` will: the same "
+                    "computation, posted nowhere. `policy` is the file's path in your workspace.",
+                    {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, score),
+           ToolSpec("submit", "Have the gate check a submission file and post its score to the board: the only "
+                    "score that counts. The score is exact (no held-out set, no noise): the same file always "
+                    "scores the same, and anything strictly above the record is a record. `policy` is the "
+                    "file's path in your workspace.",
+                    {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, submit))
+          if lab.cfg.gate.exact else
+          (ToolSpec("score", "Score a policy file on the public TRAINING seeds with the task gate.",
+                    {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, score),
+           ToolSpec("submit", "Score a policy on the HELD-OUT seeds. The result is posted to the board by the "
+                    "gate and is the only score that counts. The policy is first timed on a few training episodes; "
+                    "a slow one runs in the background (this call then returns at once with a job id, and the "
+                    "result comes to you on a later lab call and in `jobs`).",
+                    {"type": "object", "properties": {"policy": {"type": "string"}}, "required": ["policy"]}, submit))),
         ToolSpec("jobs", "Your background jobs (runs, held-out submissions, confirmation batches) and the results of "
                  "finished ones.",
                  {"type": "object", "properties": {}}, jobs),

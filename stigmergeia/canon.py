@@ -8,11 +8,18 @@ carry `{{name}}` placeholders in canon/ and stigmergeia/prompts/, and
 config says. Only structural facts are offered: nothing here names the run's
 duration, a budget or a time left (CONTRIBUTING.md: limits stay hidden), and
 `render` refuses a placeholder it does not know rather than posting it raw.
+
+The rest name the task: what a submission is called, how `score` and
+`submit` judge it, the side quests. Their defaults (the snake task's words)
+are canon/vocabulary.toml; a task overrides any of them in its own
+tasks/<name>/canon.toml. A key the defaults don't have is refused, so a typo
+cannot silently leave the snake wording in another task's canon.
 """
 
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from .config import RunConfig
@@ -34,6 +41,25 @@ def _duration(seconds: float) -> str:
     return f"{int(seconds)} seconds"
 
 
+VOCABULARY = CANON_DIR / "vocabulary.toml"
+
+
+def vocabulary(cfg: RunConfig) -> dict[str, str]:
+    """The task's words: the defaults, with the task's own canon.toml over them."""
+    words = tomllib.loads(VOCABULARY.read_text())
+    own = cfg.task_dir / "canon.toml"
+    if own.is_file():
+        theirs = tomllib.loads(own.read_text())
+        unknown = sorted(set(theirs) - set(words))
+        if unknown:
+            raise ValueError(f"{own}: unknown vocabulary key(s) {unknown}; known: {sorted(words)}")
+        bad = sorted(k for k, v in theirs.items() if not isinstance(v, str))
+        if bad:
+            raise ValueError(f"{own}: vocabulary values must be strings: {bad}")
+        words.update(theirs)
+    return words
+
+
 def facts(cfg: RunConfig) -> dict[str, str]:
     """The configuration facts the canon may state, as the words it states them in."""
     node = cfg.node
@@ -41,6 +67,7 @@ def facts(cfg: RunConfig) -> dict[str, str]:
     after = node.run_background_after_s if node else None
     runs = node.max_background_runs if node else 2
     return {
+        **vocabulary(cfg),
         "lab_cores": _word(cores),
         "lab_cores_plural": "s" if cores != 1 else "",
         "background_after": _duration(after) if after else "a few minutes",

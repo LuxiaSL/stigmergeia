@@ -36,6 +36,7 @@ jobs:
         run: |
           uv run pytest tasks/snake/tests
           uv run pytest tasks/lmspeed/tests
+          uv run pytest tasks/hailstone/tests
 
       - name: State what is true now
         run: |

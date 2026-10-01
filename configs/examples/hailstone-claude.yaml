@@ -1,0 +1,39 @@
+# Ten Claude agents on hailstone (Collatz delay records), with the opening round.
+# Machine values (node host, remote dirs, cores) come from the local profile.
+# Stage a run from it:
+#   stigmergeia stage my-run configs/examples/hailstone-claude.yaml --board-port 7440 --panel-port 7450
+run_name: hailstone-claude
+task_dir: ../../tasks/hailstone
+n_agents: 10
+model: claude-sonnet-5-5
+effort: medium
+system_prompt: ""          # removes Claude Code's default system prompt entirely
+per_agent_budget_usd: 3    # enforced by the harness; agents are never shown it
+total_budget_usd: 30
+max_wall_hours: 1.0        # the run is ended from outside; agents are never told when
+env_file: ../../.env       # ANTHROPIC_API_KEY=... (gitignored)
+
+board:                     # stage fills in the URL and token of the run's fresh board
+  url: http://127.0.0.1:7440
+  operator_token_file: ../../boards/hailstone-claude/operator.token
+
+node:
+  cores_per_agent: 4       # agent i gets cores first_core + 4i ... (first_core: the profile's range start)
+  mem: 4G
+  run_timeout_s: 600
+
+gate:
+  exact: true              # the score is computed exactly from the submitted numbers: no seeds, no confirmation
+  train_episodes: 4        # one "episode" per bit size; the gate ignores the count
+  heldout_episodes: 4
+  episode_cpu_s: null      # no per-episode budget: the gate runs none of the agent's code
+  probe_episodes: 0        # nothing to time: checking takes milliseconds
+  estimate_s: 5            # so every submit runs in the foreground
+  heldout_timeout_s: 120
+
+local_cpu_quota: "100%"    # of the one local core each agent's shell is pinned to
+local_mem_max: 2G
+
+opening_round:
+  reveal_after_s: 600      # reveal whatever is sealed by then
+  answer_turn_s: 90        # answers go one agent at a time, in agent order

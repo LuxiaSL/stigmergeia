@@ -125,6 +125,12 @@ class NodeConfig(_Strict):
 
 
 class GateConfig(_Strict):
+    exact: bool = Field(
+        default=False, description="the gate's score is an exact property of the submitted object (a checker "
+                                   "computing it, e.g. hailstone), not a noisy estimate: no held-out seeds matter, no "
+                                   "confirmation batch is run, and a record is any score strictly better than the "
+                                   "record. The gate must report std 0. False: held-out batches, confirmation, and "
+                                   "significance (snake, lmspeed)")
     train_episodes: int = Field(default=100, ge=1)
     heldout_episodes: int = Field(default=500, ge=1)
     episode_cpu_s: float | None = Field(

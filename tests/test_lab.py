@@ -124,6 +124,25 @@ class LabSubmitTests(unittest.TestCase):
         p = self.submit(lab, slot, node)
         self.assertFalse(p["confirmed"])  # below the record: not a candidate
 
+    def test_exact_gate_one_batch_strictly_better_no_ties(self):
+        # an exact score (hailstone): the first batch counts, no confirmation batch is spent, a record is
+        # anything strictly above the record, and an equal score is neither a record nor a tie
+        node = FakeNode([18.5, 18.5, 18.500001, 13.0, 99.0], std=0.0, episodes=4)
+        lab, slot = self.lab(node, exact=True, probe_episodes=0)
+        p = self.submit(lab, slot, node)
+        self.assertTrue(p["confirmed"] and p["record"])
+        self.assertEqual((len(p["batches"]), p["ci95"], lab.record), (1, [18.5, 18.5], 18.5))
+        p = self.submit(lab, slot, node)  # equal: not a record, and no tie in an exact score
+        self.assertTrue(p["confirmed"])
+        self.assertFalse(p["record"] or p["tie"])
+        p = self.submit(lab, slot, node)  # strictly better by the smallest margin: a record
+        self.assertTrue(p["record"])
+        p = self.submit(lab, slot, node)  # worse: confirmed on its one batch, and nothing is run in the background
+        self.assertTrue(p["confirmed"])
+        self.assertFalse(p["record"])
+        self.assertEqual(node.means, [99.0])  # every submit used exactly one batch
+        self.assertFalse(any(j.kind == "confirm" for j in slot.jobs.values()) if hasattr(slot, "jobs") else False)
+
     def test_timeout_and_episode_cpu_flags(self):
         node = FakeNode([])
         lab, _ = self.lab(node, higher_is_better=False, episode_cpu_s=None, heldout_timeout_s=1300)

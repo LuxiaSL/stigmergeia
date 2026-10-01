@@ -92,7 +92,9 @@ providers.
    tells it how the run went, collects a private survey, and lets the agents meet on the board.
 
 `configs/examples/` holds a Claude swarm, a Codex swarm, a mixed swarm (`agents:` groups give each
-agent its backend and model), the one-agent control, and the CPU language-model speedrun task.
+agent its backend and model), the one-agent control, the CPU language-model speedrun task, and
+hailstone (Collatz delay records, scored exactly). [`docs/TASKS.md`](docs/TASKS.md) describes
+the tasks and the contract a new one keeps.
 
 ## Expect this
 

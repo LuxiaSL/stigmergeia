@@ -47,3 +47,44 @@ def test_no_fact_names_time_or_money(tmp_path: Path) -> None:
     keys = " ".join(facts(cfg(tmp_path)))
     for word in ("hour", "budget", "usd", "deadline", "wall", "spend", "left"):
         assert word not in keys
+
+
+# The snake canon as agents read it, pinned: snake runs are compared across the project's life, so a
+# change to these words must be deliberate (update the pins and say why in the commit).
+SNAKE_CANON_SHA256 = {
+    "01-board-basics.md": "947e2d895f65380a00346e4b9dca70ab024c2daa2571b486a4c7b55330071617",
+    "02-swarm-environment.md": "67fb7567b3c858ce4617a78ee6dde44027f6371ca1df5d8742fcd2c8a123fbb9",
+}
+
+
+def test_the_default_vocabulary_renders_the_pinned_snake_canon(tmp_path: Path) -> None:
+    import hashlib
+    out = render_canon(cfg(tmp_path), tmp_path / "canon")
+    got = {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(out.glob("*.md"))}
+    assert got == SNAKE_CANON_SHA256
+
+
+def test_a_task_speaks_in_its_own_words(tmp_path: Path) -> None:
+    hail = cfg(REPO_ROOT / "tasks" / "hailstone")
+    text = (render_canon(hail, tmp_path / "canon") / "02-swarm-environment.md").read_text()
+    for snake_word in ("policy", "policies", "held-out seeds", "seeds", "episode", "95%"):
+        assert snake_word not in text, snake_word
+    assert "The score is exact" in text and "best verified search" in text
+    orientation = render((REPO_ROOT / "stigmergeia" / "prompts" / "orientation.md").read_text(), hail)
+    assert "verified scores" in orientation and "held-out" not in orientation
+
+
+def test_a_task_vocabulary_cannot_invent_or_mistype_keys(tmp_path: Path) -> None:
+    (tmp_path / "canon.toml").write_text('nuon = "search"\n')
+    with pytest.raises(ValueError, match="unknown vocabulary key"):
+        facts(cfg(tmp_path))
+    (tmp_path / "canon.toml").write_text("noun = 3\n")
+    with pytest.raises(ValueError, match="must be strings"):
+        facts(cfg(tmp_path))
+
+
+def test_no_vocabulary_names_time_or_money(tmp_path: Path) -> None:
+    for task in (tmp_path, REPO_ROOT / "tasks" / "hailstone"):
+        values = " ".join(facts(cfg(task)).values()).lower()
+        for word in ("budget", "deadline", "hours", "minutes left", "time left", "$"):
+            assert word not in values, (task, word)
