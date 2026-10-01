@@ -160,7 +160,9 @@ def provision(cfg: RunConfig) -> None:
             f"mkdir -p {shlex.quote(n.harness_dir + '/secrets')}",
             f"chmod 700 {shlex.quote(n.harness_dir + '/secrets')}",
         ]))
-        r = subprocess.run(["rsync", "-a", "--exclude", "__pycache__/", "--exclude", "tests/",
+        # --delete: the gate's canonical copy mirrors the task exactly; a file removed from the task
+        # (an old baseline, say) must not live on where the gate and the lab can still reach it
+        r = subprocess.run(["rsync", "-a", "--delete", "--exclude", "__pycache__/", "--exclude", "tests/",
                             f"{cfg.task_dir}/", n.remote(f"{task}/")], capture_output=True, text=True, timeout=120)
         if r.returncode:
             raise RuntimeError(f"task upload failed: {r.stderr[-1000:]}")
