@@ -27,11 +27,12 @@ const fmt = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600
 const hash = n => { const x = Math.sin(n * 9301.17 + 49297.3) * 233280; return x - Math.floor(x); };
 const LAB = new Set(['score', 'submit', 'run', 'wait', 'confirm', 'jobs']);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PROF = /[?&]prof\b/.test(location.search) ? (window.__prof = {}) : null;  // ?prof: per-layer frame timings in window.__prof
 
 // ------------------------------------------------------------------ the fold
 const S = {
   meta: null, seq: 0, agents: [], backend: {},
-  posts: [], byId: new Map(), gates: [], board: [], round: [],
+  posts: [], byId: new Map(), byAgent: {}, gates: [], board: [], round: [],
   acts: {}, jobs: {}, ends: {}, captions: [],
   live: {}, spent: null, boardError: null,
   serverNow: 0, polledPerf: 0, lastOkPerf: 0, everOk: false, pollFailed: false,
@@ -76,6 +77,7 @@ const warnLine = t => { const m = /Result:\s*(.*)/.exec(t || ''); return (m ? m[
 function afterFold() {
   S.board.sort((a, b) => a.id - b.id);
   S.posts.sort((a, b) => a.t - b.t || a.id - b.id);
+  S.byAgent = {}; for (const p of S.posts) (S.byAgent[p.who] ||= []).push(p);  // per-agent, in time order
   S.gates.sort((a, b) => a.t - b.t || a.id - b.id);
   S.captions.sort((a, b) => a.t - b.t);
   for (const a of Object.keys(S.acts)) S.acts[a].sort((p, q) => p.t - q.t);
@@ -110,14 +112,17 @@ function Tnow() {
 }
 
 // ------------------------------------------------------------------ geometry
-const glassEl = $('glass'), farm = $('farm'), sandCv = $('sand');
+const glassEl = $('glass'), farm = $('farm');
+let sandCv = $('sand');
 const fctx = farm.getContext('2d');
 let W = 800, H = 520, DPR = 1, G = {};
 function layout() {
   const r = glassEl.getBoundingClientRect();
   W = Math.max(320, Math.round(r.width)); H = Math.max(240, Math.round(r.height));
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  for (const c of [farm, sandCv]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+  farm.width = Math.round(W * DPR); farm.height = Math.round(H * DPR);
+  sandCv.width = W; sandCv.height = H;  // the sand is soft: 1x pixels; the marks above keep full density
+  noiseDirty = true;
   for (const c of [dig, light]) { c.width = W; c.height = H; }
   ground.width = 4; ground.height = H;
   const SKY = Math.max(64, Math.min(110, H * 0.15));
@@ -141,7 +146,8 @@ const ptOf = p => [colX(rootOf(p)) + lane(p.who) + (hash(p.id) - 0.5) * colW() *
 const colorOf = a => C[S.backend[a]] || C.ink;
 
 // ------------------------------------------------------------------ state at T
-const visiblePosts = () => S.posts.filter(p => p.t <= T && S.agents.includes(p.who));
+// posts up to T, in time order: a binary search on the sorted list, not a scan
+const visiblePosts = () => { const out = S.posts.slice(0, lastAt(S.posts, T) + 1); return out.filter(p => p.who in S.byAgent && S.agents.includes(p.who)); };
 function lastAt(arr, t) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m].t <= t) lo = m + 1; else hi = m; } return lo - 1; }
 function statusAt(a) {
   const end = S.ends[a];
@@ -179,13 +185,12 @@ function bestAt() {
   return best;
 }
 function trailOf(a, vis) {
-  const pts = [[colX(a) + lane(a), G.TOP - 2, null]];
-  for (const p of vis) if (p.who === a) { const [x, y] = ptOf(p); pts.push([x, y, p]); }
+  const pts = [[colX(a) + lane(a), G.TOP - 2, null]], mine = S.byAgent[a] || [], n = lastAt(mine, T);
+  for (let i = 0; i <= n; i++) { const p = mine[i], [x, y] = ptOf(p); pts.push([x, y, p]); }
   return pts;
 }
 function chamberAt(g, vis) {
-  let anchor = null;
-  for (const p of vis) if (p.who === g.agent && p.t <= g.t) anchor = p;
+  const mine = S.byAgent[g.agent] || [], anchor = mine[lastAt(mine, Math.min(g.t, T))] || null;
   const x = anchor ? colX(rootOf(anchor)) + lane(g.agent) : colX(g.agent) + lane(g.agent);
   return [x + (g.id % 2 ? 14 : -14), yOf(g.t) + 3];
 }
@@ -272,8 +277,8 @@ function paintLight(vis, trails) {
     if (g.t > T || !g.record) continue;
     const [x, y] = chamberAt(g, vis); glow(x, y, 70, C.record, 0.32);
   }
-  for (const p of vis) {      // fresh work glows in its author's colour, then cools
-    const age = T - p.t; if (age > 45) continue;
+  for (let i = vis.length - 1; i >= 0 && T - vis[i].t <= 45; i--) {  // fresh work glows in its author's colour, then cools
+    const p = vis[i], age = T - p.t;
     const [x, y] = ptOf(p); glow(x, y, 46, colorOf(p.who), 0.38 * Math.exp(-age / 12));
     const par = parentOf(p);  // and borrowed code flares amber where it lands
     if (par) glow(x, y, 60, C.trail, 0.5 * Math.exp(-age / 15));
@@ -285,18 +290,35 @@ function paintLight(vis, trails) {
   lctx.globalCompositeOperation = 'source-over';
 }
 
+// veins: value-noise fbm baked into a small tiling texture once, sampled by the shader
+let noiseDirty = true;
+const noiseCv = document.createElement('canvas');
+function bakeNoise() {
+  const w = 256, h = 256; noiseCv.width = w; noiseCv.height = h;
+  const ctx = noiseCv.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+  const lat = (x, y, s) => hash(((x % s + s) % s) * 7.31 + ((y % s + s) % s) * 131.7 + s);
+  const vn = (x, y, s) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = lat(xi, yi, s), b = lat(xi + 1, yi, s), c = lat(xi, yi + 1, s), e = lat(xi + 1, yi + 1, s);
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + e) * ux * uy; };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = 0, amp = 0.5, sx = 3, sy = 12;  // stretched across: veins lie along the strata
+    for (let o = 0; o < 5; o++) { v += amp * vn(x / w * sx, y / h * sy, o === 0 ? 3 : sx); sx *= 2; sy *= 2; amp *= 0.5; }
+    const o4 = (y * w + x) * 4; d[o4] = d[o4 + 1] = d[o4 + 2] = Math.round(v * 255); d[o4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 // ------------------------------------------------------------------ the sand (WebGL)
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
 const FS = `
 precision highp float;
-uniform sampler2D uGround, uDig, uLight;
+uniform sampler2D uGround, uDig, uLight, uNoise;
 uniform vec2 uRes; uniform float uTime, uDpr;
 uniform vec3 uS1, uS2, uS3, uGlass, uVoid, uGold;
 uniform vec3 uBest; // x, y (css px), strength
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
   return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-float fbm(vec2 p){ float v = 0., a = .5; for (int i = 0; i < 5; i++){ v += a*n(p); p = p*2.03 + 17.; a *= .5; } return v; }
 void main(){
   vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;   // css px, y down
   vec2 css = uRes / uDpr;
@@ -309,7 +331,8 @@ void main(){
     col = uGlass + vec3(.03,.022,.015) * smoothstep(.0, 1., uv.y * 6.);
   } else {
     float grain = h(floor(px));
-    float vein = fbm(px * vec2(.012, .05) + vec2(0., st.r * 3.));
+    // veins: baked once into uNoise (fbm is too dear per pixel per frame); bands shift the lookup
+    float vein = texture2D(uNoise, fract(uv * vec2(1., 1.) + vec2(0., st.r * .37))).r;
     vec3 sand = mix(uS2, uS1, st.r);
     sand = mix(sand, uS3, undug);
     sand *= .78 + .32 * vein + .22 * (grain - .5);
@@ -321,7 +344,7 @@ void main(){
     float rim = clamp(length(vec2(dx, dy)) * 1.6, 0., 1.);
     float lit = clamp(.55 + .6 * (-dy * 2.), .2, 1.2);     // walls catch light from above
     vec3 lining = d.a > .01 ? d.rgb : vec3(0.);
-    vec3 tunnel = uVoid + lining * (.10 + .05 * n(px * .3));
+    vec3 tunnel = uVoid + lining * (.10 + .05 * h(floor(px * .3)));
     col = mix(sand, tunnel, smoothstep(.15, .85, d.a));
     col += lining * rim * .55 * lit;
     // light scattered through the sand from inside: soft, and it catches on single grains
@@ -338,9 +361,16 @@ void main(){
 }`;
 let gl = null, prog = null, tex = {};
 function initGL() {
+  if (/[?&]flat\b/.test(location.search)) return false;  // ?flat: the 2D sand, for slow or software GL
   try {
     gl = sandCv.getContext('webgl', { antialias: false, premultipliedAlpha: false });
     if (!gl) return false;
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+    if (/swiftshader|llvmpipe|software/i.test(renderer) && !/[?&]gl\b/.test(location.search)) {
+      console.info('formicarium: software GL (' + renderer + '): flat sand; ?gl forces the shader');
+      gl = null; sandCv.replaceWith(sandCv = sandCv.cloneNode()); return false;
+    }
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     prog = gl.createProgram();
@@ -351,7 +381,7 @@ function initGL() {
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    ['uGround', 'uDig', 'uLight'].forEach((name, i) => {
+    ['uGround', 'uDig', 'uLight', 'uNoise'].forEach((name, i) => {
       const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t);
       for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
         [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
@@ -365,19 +395,22 @@ function initGL() {
 function drawSand(best, now) {
   if (gl) {
     gl.viewport(0, 0, sandCv.width, sandCv.height);
+    if (noiseDirty) { bakeNoise(); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, tex.uNoise);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, noiseCv);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT); noiseDirty = false; }
     [['uGround', ground], ['uDig', dig], ['uLight', light]].forEach(([name, cv], i) => {
       gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, tex[name]);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
     });
     gl.uniform2f(gl.getUniformLocation(prog, 'uRes'), sandCv.width, sandCv.height);
-    gl.uniform1f(gl.getUniformLocation(prog, 'uDpr'), DPR);
+    gl.uniform1f(gl.getUniformLocation(prog, 'uDpr'), sandCv.width / W);
     gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), now / 1000);
     gl.uniform3f(gl.getUniformLocation(prog, 'uBest'), best ? best[0] : -999, best ? best[1] : -999, best ? best[2] : 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return;
   }
   // flat fallback: the same textures, composited plainly
-  const c = sandCv.getContext('2d'); c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const c = sandCv.getContext('2d'); c.setTransform(sandCv.width / W, 0, 0, sandCv.height / H, 0, 0);
   c.fillStyle = C.glass; c.fillRect(0, 0, W, H);
   c.imageSmoothingEnabled = false;
   const img = gctx.getImageData(0, 0, 1, H).data;
@@ -396,7 +429,7 @@ let grains = [], spoilT = null;
 function spoil(vis, now) {
   if (reduced) return;
   if (spoilT != null && T > spoilT && T - spoilT < 30) {
-    for (const p of vis) if (p.t > spoilT && p.t <= T) {
+    for (let i = vis.length - 1; i >= 0 && vis[i].t > spoilT; i--) { const p = vis[i];
       const [x, y] = ptOf(p);
       for (let i = 0; i < 16; i++) grains.push({ x, y, vx: (Math.random() - 0.5) * 70, vy: -30 - Math.random() * 70, born: now, life: 900 + Math.random() * 700,
         col: p.type === 'WARN' ? C.dead : Math.random() < 0.3 ? colorOf(p.who) : C.ink, r: 0.8 + Math.random() * 1.1 });
@@ -836,19 +869,21 @@ function frame(now) {
     if (follow) T = Tnow();
     else if (playing) { T = Math.min(Tnow(), T + (now - lastFrame) / 1000 * speed); if (T >= Tnow()) { playing = false; playB.textContent = 'play'; if (!ended()) setFollow(true); } }
     lastFrame = now;
-    const vis = visiblePosts(), trails = new Map(S.agents.map(a => [a, trailOf(a, vis)]));
+    const P = PROF ? (k, t) => { PROF[k] = (PROF[k] || 0) + performance.now() - t; } : () => {}; let t_ = performance.now();
+    const vis = visiblePosts(), trails = new Map(S.agents.map(a => [a, trailOf(a, vis)])); P('fold', t_);
     // the sand redraws when time moved (at most 8×/s while following) or the data changed
     const moved = Math.abs(T - lastSandT) > 0.01, due = now - lastSandPerf > (playing ? 0 : 125);
     if (dirtySand || lastSandV !== S.version || (moved && due)) {
-      paintGround(); paintDig(vis, trails); paintLight(vis, trails);
+      t_ = performance.now(); paintGround(); P('ground', t_); t_ = performance.now(); paintDig(vis, trails); P('dig', t_); t_ = performance.now(); paintLight(vis, trails); P('light', t_);
       lastSandT = T; lastSandV = S.version; lastSandPerf = now; dirtySand = false;
     }
     const b = bestAt(); let bestPt = null;
     if (b && b.record) { const [x, y] = chamberAt(b, vis); bestPt = [x, y, reduced ? 0.25 : 0.22 + 0.14 * Math.sin(now / 420)]; }
-    drawSand(bestPt, now);
-    drawMarks(vis, trails, now);
+    t_ = performance.now(); drawSand(bestPt, now); P('sand', t_);
+    t_ = performance.now(); drawMarks(vis, trails, now); P('marks', t_);
     spoil(vis, now); drawGrains(now, Math.min(0.05, (now - (frame.last || now)) / 1000)); frame.last = now;
-    if (now - lastUi > 200) { uiTick(false); lastUi = now; if (playing) drawDrawers(); }
+    if (PROF) PROF.frames = (PROF.frames || 0) + 1;
+    if (now - lastUi > 200) { t_ = performance.now(); uiTick(false); P('ui', t_); lastUi = now; if (playing) drawDrawers(); }
   } else if (now - lastUi > 500) { hud(); lastUi = now; }
   requestAnimationFrame(frame);
 }
