@@ -1,11 +1,11 @@
-"""The run manifest: what a run was, by hash, so a number can cite it.
+"""The run manifest: what a run was, by hash.
 
 `start_manifest` is written when a run starts, `finish_manifest` when it
-ends, both to `runs/<run>/run-manifest.json`. Together they are the receipt a
-claim about the run carries (CONTRIBUTING.md): the sha256 of the config as
-run, of every canon document and every task file, the harness commit and
-whether its tree was clean, the Korax pin, each agent's backend and model,
-and at the end the sha256 of the board database.
+ends, both to `runs/<run>/run-manifest.json`. Together they say exactly what
+ran, so two runs can be compared knowing what differed: the sha256 of the
+config as run, of every canon document and every task file, the harness
+commit and whether its tree was clean, the Korax pin, each agent's backend
+and model, and at the end the sha256 of the board database.
 
 Hashes are of bytes, never of parsed content: a reader re-hashes the files
 they hold and compares.

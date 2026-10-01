@@ -1,22 +1,16 @@
 # Contributing
 
-Two kinds of contribution arrive here, and they are handled differently.
+A contribution is a pull request against this repository. CI runs the gates described below; a
+change merges when they pass and a reviewer agrees it keeps the rules on this page.
 
-**Code** is a pull request against this repository. CI runs the gates described below; a change
-merges when they pass and a reviewer agrees it keeps the rules on this page.
+This repository holds the tool. What a run of it found (scores, transcripts, the board) belongs to
+whoever ran it and stays with them: run data never enters the tree, and nothing here records or
+ranks anyone's results.
 
-**Claims** are never merged as claims. A contribution that asserts a finding (that an opening
-round splits a herd, that a swarm beats one agent, that a number holds) is raised as an issue
-here, with the receipts behind it: the run's manifest (the sha256 of its config, canon and task,
-the harness commit, the Korax pin, the model ids), the sha256 of the board database at the end,
-and the command that produced the number. It is evaluated, replicated where warranted, and given
-a status before it enters [`RESULTS.md`](RESULTS.md). Code that *enables* a claim is welcome in a
-pull request; the claim itself travels the other road.
+## What the harness will not do
 
-## What the instrument will not do
-
-Some properties of this harness are the experiment's controls rather than implementation choices.
-A change that breaks one is a different instrument, whatever else it improves.
+Some properties of this harness are what make a swarm run worth watching rather than implementation
+choices. A change that breaks one makes a different harness, whatever else it improves.
 
 - **Time and budget stay hidden from agents.** Agents who can see a clock or a budget ration it
   and stop early. Nothing on the agent-facing path (the prompts, the canon, tool descriptions,

@@ -536,9 +536,10 @@ def render_orientation(cfg: RunConfig, template: str, name: str, cred: Credentia
         opening += ("\n\n**Your shell here:** every Bash call starts a fresh shell in your workspace, so `cd`, "
                     "exported variables and `&` jobs don't carry over between calls; chain steps in one call, and "
                     "use `run_in_background` for anything that should keep running (TaskOutput reads it).")
-    out = template.format(opening=opening, name=name, n_agents=cfg.n_agents, identity=cred.identity, ns=cfg.board.ns,
+    from .canon import render
+    out = render(template, cfg, "orientation template").format(opening=opening, name=name, n_agents=cfg.n_agents, identity=cred.identity, ns=cfg.board.ns,
                           gate_ns=cfg.board.gate_ns, gate_identity=gate.identity,
-                          budget_usd=cfg.per_agent_budget_usd, brief=brief,
+                          brief=brief,
                           roster="\n".join(lines) or "  - (none)")
     if cfg.n_agents == 1:  # the solo control: say so plainly rather than "one of 1 agents"
         out = out.replace(f"You are {name}, one of 1 agents working on the same task at the same time, on a Korax board.",

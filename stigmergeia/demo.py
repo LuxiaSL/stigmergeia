@@ -96,6 +96,7 @@ def run_demo(agents: int, minutes: float, port: int | None, rounds: bool = True,
     `port`: serve the panel there while it runs (None: no panel). `stay`: keep
     the board and the panel up after the run until Ctrl-C."""
     from . import cli
+    from .canon import render_canon
     from .config import load_config
     from .panel.server import serve
 
@@ -114,14 +115,15 @@ def run_demo(agents: int, minutes: float, port: int | None, rounds: bool = True,
                                "--port", str(board_port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         _wait(url, server)
-        r = subprocess.run([py, str(BOOTSTRAP), "setup", "--url", url, "--token-file", str(token),
-                            "--canon", str(REPO_ROOT / "canon")], capture_output=True, text=True)
-        if r.returncode:
-            raise RuntimeError(f"board setup failed: {(r.stderr or r.stdout)[-800:]}")
         cfg_path = REPO_ROOT / "runs" / run / "config.yaml"
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(yaml.safe_dump(demo_config(run, url, token, agents, minutes, rounds), sort_keys=False))
         cfg = load_config(cfg_path)
+        canon = render_canon(cfg, cfg.run_dir / "canon")
+        r = subprocess.run([py, str(BOOTSTRAP), "setup", "--url", url, "--token-file", str(token),
+                            "--canon", str(canon)], capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f"board setup failed: {(r.stderr or r.stdout)[-800:]}")
         cli.provision(cfg)
         if port is not None:
             threading.Thread(target=serve, args=(cfg, port), daemon=True).start()

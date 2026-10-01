@@ -11,7 +11,7 @@ Steps, each refusing rather than guessing:
 2. The board server, as a systemd user service `stigmergeia-board-<run>`
    (or, with --no-services, the command to start it yourself; staging then
    stops and says what to run next).
-3. Board setup: the canon from canon/, the grants the swarm needs, and rakes
+3. Board setup: the canon from canon/ rendered for this run (stigmergeia.canon), the grants the swarm needs, and rakes
    only when --rakes names a dump (off by default).
 4. The run's config at <runs_dir>/<run>/config.yaml: the base config with the
    run name, board URL, token path, and optional agent count and duration
@@ -37,11 +37,11 @@ from typing import Any
 
 import yaml
 
+from .canon import render_canon
 from .config import load_config
 from .profile import REPO_ROOT
 
 BOOTSTRAP = REPO_ROOT / "bootstrap" / "board.py"
-CANON = REPO_ROOT / "canon"
 PATH_KEYS = ("runs_dir", "task_dir", "env_file", "korax_cli_bin", "boards_dir")
 
 
@@ -113,17 +113,17 @@ def stage(a: argparse.Namespace) -> int:
     _run(["systemd-run", "--user", f"--unit=stigmergeia-board-{a.run}", "--collect", "-p", "Restart=on-failure",
           str(server), "serve", "--db", str(db), "--port", str(a.board_port)], "starting the board service")
     _wait_for_board(url)
-    setup = [py, str(BOOTSTRAP), "setup", "--url", url, "--token-file", str(token), "--canon", str(CANON)]
-    if a.rakes:
-        setup += ["--rakes", str(a.rakes)]
-    _run(setup, "board setup")
-    print(f"served    {url} (unit stigmergeia-board-{a.run}); canon seeded" + (", rakes seeded" if a.rakes else ""))
-
     raw = derive_config(base, a.run, a.board_port, token, a.agents, a.hours)
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False))
     cfg = load_config(cfg_path)
     print(f"config    {cfg_path}")
+    canon = render_canon(cfg, cfg.run_dir / "canon")  # the canon, with this run's configuration facts
+    setup = [py, str(BOOTSTRAP), "setup", "--url", url, "--token-file", str(token), "--canon", str(canon)]
+    if a.rakes:
+        setup += ["--rakes", str(a.rakes)]
+    _run(setup, "board setup")
+    print(f"served    {url} (unit stigmergeia-board-{a.run}); canon seeded" + (", rakes seeded" if a.rakes else ""))
     cli.provision(cfg)
     _run(["systemd-run", "--user", f"--unit=stigmergeia-panel-{a.run}", "--collect", f"--working-directory={REPO_ROOT}",
           py, "-m", "stigmergeia.cli", "panel", str(cfg_path), "--port", str(a.panel_port)], "starting the panel")

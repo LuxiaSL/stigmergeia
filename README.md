@@ -12,8 +12,7 @@ it records everything they do, so you can watch structure appear, or fail to.
 The harness is the whole of it: the runner that starts and paces agents on either backend, the
 tools they share, the sandbox their shells run in, the jail their code runs in on a compute node,
 the gate that scores held-out work, the coordination protocol, and a live panel.
-[`CONTRIBUTING.md`](CONTRIBUTING.md) states how code and claims arrive, the rules both are held
-to, and the gates a change passes.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) states the rules a change is held to and the gates it passes.
 
 ## The question it was built for
 
@@ -121,11 +120,6 @@ Some of what a run does looks wrong and is the instrument working:
 Run it from a checkout: the canon, the tasks, the jail and the bootstrap live beside the package,
 and runs write to `runs/` and `boards/` at the repository root (both gitignored). `uv sync`
 installs the pinned Korax from `vendor/korax` ([`VENDOR.md`](VENDOR.md)).
-
-## Results
-
-[`RESULTS.md`](RESULTS.md) holds what the harness has established, each item with a status, and
-says what can and cannot be checked from this repository.
 
 ## License
 
